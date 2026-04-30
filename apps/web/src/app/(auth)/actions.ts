@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { dashboardPathForRole, getSessionUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { loginSchema, signupSchema } from '@kabaddiadda/shared';
 
@@ -19,7 +20,9 @@ export async function signInAction(formData: FormData) {
   if (error) return { error: error.message };
 
   revalidatePath('/', 'layout');
-  redirect('/feed');
+
+  const session = await getSessionUser();
+  redirect(session ? dashboardPathForRole(session.role) : '/feed');
 }
 
 export async function signUpAction(formData: FormData) {
