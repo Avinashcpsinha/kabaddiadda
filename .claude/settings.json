@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --env-file=apps/web/.env.local packages/db/scripts/apply-migration.mjs 0003)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:3001/organiser)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:3001/feed)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:3001/admin)",
+      "Bash(node --env-file=apps/web/.env.local packages/db/scripts/apply-migration.mjs 0004)",
+      "Bash(node --env-file=apps/web/.env.local packages/db/scripts/apply-migration.mjs 0005)",
+      "Bash(node --env-file=apps/web/.env.local packages/db/scripts/apply-migration.mjs 0006)",
+      "Bash(curl -s -o /dev/null -w \"feed: %{http_code}\\\\n\" http://localhost:3001/feed/tournaments)",
+      "Bash(curl -s -o /dev/null -w \"live list: %{http_code}\\\\n\" http://localhost:3001/feed/live)",
+      "Bash(curl -s -o /dev/null -w \"tenant page: %{http_code}\\\\n\" http://localhost:3001/t/demo-league)",
+      "Bash(curl -s -o /dev/null -w \"fixtures: %{http_code}\\\\n\" \"http://localhost:3001/organiser/tournaments/00000000-0000-0000-0000-000000000000/fixtures\")",
+      "Bash(node --env-file=apps/web/.env.local packages/db/scripts/apply-migration.mjs 0007)",
+      "Bash(curl -s -o /dev/null -w \"team page: %{http_code}\\\\n\" \"http://localhost:3001/organiser/tournaments/00000000-0000-0000-0000-000000000000/teams/00000000-0000-0000-0000-000000000000\")",
+      "Bash(node --env-file=apps/web/.env.local packages/db/scripts/seed-demo-match.mjs)",
+      "Bash(node --env-file=.env.local ../../packages/db/scripts/seed-demo-match.mjs)",
+      "PowerShell(Start-Process \"http://localhost:3001/organiser/tournaments/30c6bd0a-2a35-44c3-8ada-d7cf13348539/matches/60678253-b79c-4bb6-a3be-836686f6b1ea/scoring\")",
+      "PowerShell(Start-Process \"msedge\" -ArgumentList \"--inprivate\", \"--new-window\", \"http://localhost:3001/live/60678253-b79c-4bb6-a3be-836686f6b1ea\")",
+      "Bash(pnpm --filter @kabaddiadda/db typecheck)",
+      "Bash(pnpm --filter @kabaddiadda/shared typecheck)",
+      "Bash(pnpm --filter @kabaddiadda/web typecheck)"
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Kabaddiadda",
+    "slug": "kabaddiadda",
+    "scheme": "kabaddiadda",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0a0c"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kabaddiadda.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0a0a0c"
+      },
+      "package": "com.kabaddiadda.app"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": ["expo-router"],
+    "experiments": { "typedRoutes": true },
+    "extra": {
+      "supabaseUrl": "$SUPABASE_URL_PUBLIC",
+      "supabaseAnonKey": "$SUPABASE_ANON_KEY_PUBLIC"
+    }
+  }
+}
