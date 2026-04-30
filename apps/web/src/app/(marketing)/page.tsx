@@ -59,10 +59,24 @@ export default async function HomePage() {
     .order('updated_at', { ascending: false })
     .limit(9);
 
+  // Tournaments section: show non-draft tournaments across all leagues, newest
+  // first by start date. RLS already hides drafts from anonymous visitors but
+  // we filter explicitly so the SQL plan is cleaner.
+  const { data: tournaments } = await supabase
+    .from('tournaments')
+    .select(
+      `id, slug, name, format, status, start_date, end_date, cover_image,
+       tenant:tenant_id(slug, name, logo_url)`,
+    )
+    .neq('status', 'draft')
+    .order('start_date', { ascending: false, nullsFirst: false })
+    .limit(9);
+
   return (
     <>
       <Hero hostHref={hostHref} hostLabel={hostLabel} watchHref={watchHref} />
       <LiveMatchesSection matches={liveMatches ?? []} />
+      <TournamentsSection tournaments={tournaments ?? []} />
       <Features />
       <RolesSection
         hostHref={hostHref}
@@ -86,6 +100,40 @@ interface LiveMatchCard {
   away_team: { name: string; short_name: string | null; primary_color: string | null } | null;
   tournament: { name: string } | null;
   tenant: { name: string; logo_url: string | null } | null;
+}
+
+interface TournamentCard {
+  id: string;
+  slug: string;
+  name: string;
+  format: string;
+  status: string;
+  start_date: string | null;
+  end_date: string | null;
+  cover_image: string | null;
+  tenant: { slug: string; name: string; logo_url: string | null } | null;
+}
+
+const FORMAT_LABEL: Record<string, string> = {
+  league: 'League',
+  knockout: 'Knockout',
+  group_knockout: 'Group + KO',
+  double_elimination: 'Double Elim.',
+};
+
+const STATUS_VARIANT: Record<string, 'live' | 'default' | 'outline' | 'secondary'> = {
+  live: 'live',
+  scheduled: 'outline',
+  upcoming: 'outline',
+  completed: 'secondary',
+};
+
+function formatDateRange(start: string | null, end: string | null): string | null {
+  if (!start && !end) return null;
+  const fmt = (d: string) =>
+    new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  if (start && end) return `${fmt(start)} → ${fmt(end)}`;
+  return fmt((start ?? end)!);
 }
 
 function formatClock(seconds: number): string {
@@ -244,6 +292,106 @@ function LiveMatchesSection({ matches }: { matches: LiveMatchCard[] }) {
             </Link>
           ))}
         </div>
+      </div>
+    </section>
+  );
+}
+
+function TournamentsSection({ tournaments }: { tournaments: TournamentCard[] }) {
+  if (tournaments.length === 0) {
+    return (
+      <section className="container mx-auto px-4 py-16">
+        <div className="mx-auto max-w-2xl text-center">
+          <h2 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">
+            Tournaments
+          </h2>
+          <p className="mt-3 text-muted-foreground">
+            No tournaments published yet — check back soon, or host your own.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="container mx-auto px-4 py-20">
+      <div className="mb-10 flex items-end justify-between gap-4">
+        <div>
+          <Badge variant="outline" className="mb-3 gap-1.5 border-primary/30 bg-primary/5">
+            <Trophy className="h-3 w-3 text-primary" />
+            <span className="text-primary">Tournaments</span>
+          </Badge>
+          <h2 className="text-balance text-3xl font-bold tracking-tight sm:text-4xl">
+            Leagues and tournaments on Kabaddiadda
+          </h2>
+          <p className="mt-2 text-muted-foreground">
+            Tap any card to open the league page — fixtures, standings, teams, and live scoring.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        {tournaments.map((t) => {
+          const dateRange = formatDateRange(t.start_date, t.end_date);
+          const tenantSlug = t.tenant?.slug;
+          const tenantName = t.tenant?.name ?? 'Organiser';
+          const href = tenantSlug ? `/t/${tenantSlug}/${t.slug}` : '#';
+          const formatLabel = FORMAT_LABEL[t.format] ?? t.format;
+          const statusVariant = STATUS_VARIANT[t.status] ?? 'outline';
+
+          return (
+            <Link
+              key={t.id}
+              href={href}
+              className="group flex flex-col overflow-hidden rounded-xl border border-border/60 bg-card transition-all hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5"
+            >
+              {t.cover_image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={t.cover_image}
+                  alt={t.name}
+                  className="h-40 w-full object-cover transition-transform group-hover:scale-[1.02]"
+                />
+              ) : (
+                <div className="flex h-40 items-center justify-center bg-gradient-to-br from-primary/15 via-primary/5 to-transparent">
+                  <Trophy className="h-12 w-12 text-primary/40" />
+                </div>
+              )}
+              <div className="flex flex-1 flex-col gap-3 p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
+                      <Crown className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{tenantName}</span>
+                    </div>
+                    <h3 className="truncate text-base font-semibold">{t.name}</h3>
+                  </div>
+                  <Badge variant={statusVariant} className="shrink-0 text-[10px] uppercase">
+                    {t.status === 'live' ? '● LIVE' : t.status}
+                  </Badge>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Sparkles className="h-3 w-3" />
+                    {formatLabel}
+                  </span>
+                  {dateRange && (
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      {dateRange}
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-auto flex items-center justify-between border-t border-border/40 pt-3 text-xs">
+                  <span className="text-muted-foreground">View league</span>
+                  <ArrowRight className="h-3 w-3 text-primary transition-transform group-hover:translate-x-0.5" />
+                </div>
+              </div>
+            </Link>
+          );
+        })}
       </div>
     </section>
   );
