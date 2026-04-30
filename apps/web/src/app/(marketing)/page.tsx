@@ -16,21 +16,55 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { getSessionUser } from '@/lib/auth';
 
-export default function HomePage() {
+export default async function HomePage() {
+  const session = await getSessionUser();
+
+  // CTAs route to the right place based on whether the visitor is signed in.
+  // Without this, a logged-in organiser clicking "Host a tournament" gets
+  // bounced to /feed by the middleware (which redirects authed users away
+  // from /signup).
+  let hostHref = '/signup?role=organiser';
+  let hostLabel = 'Host a tournament';
+  if (session?.role === 'organiser') {
+    hostHref = '/organiser/tournaments/new';
+    hostLabel = 'Create tournament';
+  } else if (session?.role === 'superadmin') {
+    hostHref = '/admin';
+    hostLabel = 'Open admin';
+  }
+
+  const watchHref = session ? '/feed' : '/signup';
+  const fanJoinHref = session ? '/feed' : '/signup';
+  const fanJoinLabel = session ? 'Open fan zone' : 'Join as a fan';
+
   return (
     <>
-      <Hero />
+      <Hero hostHref={hostHref} hostLabel={hostLabel} watchHref={watchHref} />
       <LiveStrip />
       <Features />
-      <RolesSection />
+      <RolesSection
+        hostHref={hostHref}
+        hostLabel={hostLabel}
+        fanJoinHref={fanJoinHref}
+        fanJoinLabel={fanJoinLabel}
+      />
       <MobileSection />
-      <CTA />
+      <CTA hostHref={hostHref} hostLabel={hostLabel} />
     </>
   );
 }
 
-function Hero() {
+function Hero({
+  hostHref,
+  hostLabel,
+  watchHref,
+}: {
+  hostHref: string;
+  hostLabel: string;
+  watchHref: string;
+}) {
   return (
     <section className="relative overflow-hidden">
       <div className="absolute inset-0 bg-grid opacity-[0.05]" />
@@ -56,13 +90,13 @@ function Hero() {
 
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
             <Button asChild variant="flame" size="xl">
-              <Link href="/signup?role=organiser">
-                Host a tournament
+              <Link href={hostHref}>
+                {hostLabel}
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
             <Button asChild variant="outline" size="xl">
-              <Link href="/signup">
+              <Link href={watchHref}>
                 <PlayCircle className="h-4 w-4" />
                 Watch live
               </Link>
@@ -195,7 +229,17 @@ function Features() {
   );
 }
 
-function RolesSection() {
+function RolesSection({
+  hostHref,
+  hostLabel,
+  fanJoinHref,
+  fanJoinLabel,
+}: {
+  hostHref: string;
+  hostLabel: string;
+  fanJoinHref: string;
+  fanJoinLabel: string;
+}) {
   const roles = [
     {
       icon: Users,
@@ -207,7 +251,7 @@ function RolesSection() {
         'Personalised feed and push notifications',
         'Player profiles with career stats',
       ],
-      cta: { label: 'Join as a fan', href: '/signup' },
+      cta: { label: fanJoinLabel, href: fanJoinHref },
       tone: 'from-blue-500/10 to-blue-500/0 border-blue-500/20',
     },
     {
@@ -220,7 +264,7 @@ function RolesSection() {
         'Branded microsite & fixture management',
         'Revenue, attendance, and stats reports',
       ],
-      cta: { label: 'Host a tournament', href: '/signup?role=organiser' },
+      cta: { label: hostLabel, href: hostHref },
       tone: 'from-primary/15 to-primary/0 border-primary/30',
       featured: true,
     },
@@ -359,7 +403,7 @@ function MobileSection() {
   );
 }
 
-function CTA() {
+function CTA({ hostHref, hostLabel }: { hostHref: string; hostLabel: string }) {
   return (
     <section className="container mx-auto px-4 py-24">
       <div className="relative overflow-hidden rounded-3xl border border-primary/30 bg-gradient-to-br from-primary/15 via-background to-background p-12 text-center md:p-16">
@@ -373,8 +417,8 @@ function CTA() {
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <Button asChild variant="flame" size="xl">
-              <Link href="/signup?role=organiser">
-                Get started free
+              <Link href={hostHref}>
+                {hostLabel}
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
