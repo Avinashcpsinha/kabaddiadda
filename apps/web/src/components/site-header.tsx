@@ -36,6 +36,9 @@ export async function SiteHeader() {
             <Link href="/players" className="hover:text-foreground transition-colors">
               Players
             </Link>
+            <Link href="/rankings" className="hover:text-foreground transition-colors">
+              Rankings
+            </Link>
             <Link href="/live" className="hover:text-foreground transition-colors">
               Live
             </Link>
