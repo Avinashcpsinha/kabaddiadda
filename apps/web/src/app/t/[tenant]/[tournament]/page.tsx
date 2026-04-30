@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
+  ArrowRight,
   Calendar,
+  Clock,
   Crown,
   IndianRupee,
   MapPin,
@@ -68,11 +70,28 @@ export default async function PublicTournamentPage({
     .maybeSingle();
   if (!tournament) notFound();
 
-  const { data: teams } = await supabase
-    .from('teams')
-    .select('id, name, short_name, city, primary_color')
-    .eq('tournament_id', tournament.id)
-    .order('name');
+  const [{ data: teams }, { data: matches }] = await Promise.all([
+    supabase
+      .from('teams')
+      .select('id, name, short_name, city, primary_color')
+      .eq('tournament_id', tournament.id)
+      .order('name'),
+    supabase
+      .from('matches')
+      .select(
+        'id, scheduled_at, status, round, home_score, away_score, current_half, clock_seconds, home_team:home_team_id(id, name, short_name, primary_color), away_team:away_team_id(id, name, short_name, primary_color)',
+      )
+      .eq('tournament_id', tournament.id)
+      .order('scheduled_at', { ascending: false }),
+  ]);
+
+  const liveMatches = (matches ?? []).filter((m) => m.status === 'live');
+  const upcomingMatches = (matches ?? [])
+    .filter((m) => m.status === 'scheduled')
+    .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
+  const completedMatches = (matches ?? [])
+    .filter((m) => m.status === 'completed')
+    .slice(0, 10);
 
   const branding = (tenant.branding as { primaryColor?: string; tagline?: string } | null) ?? null;
   const brandColor = branding?.primaryColor ?? null;
@@ -127,15 +146,63 @@ export default async function PublicTournamentPage({
               </CardContent>
             </Card>
 
+            {liveMatches.length > 0 && (
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+                    </span>
+                    Live now
+                  </CardTitle>
+                  <Badge variant="live">{liveMatches.length}</Badge>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <ul className="divide-y divide-border/40">
+                    {liveMatches.map((m) => (
+                      <FixtureRow key={m.id} match={m} variant="live" brandColor={brandColor} />
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
-              <CardHeader>
-                <CardTitle>Fixtures</CardTitle>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Upcoming fixtures</CardTitle>
+                <Badge variant="outline">{upcomingMatches.length}</Badge>
               </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                Fixtures will appear here once the organiser publishes them. Phase 2 launches the
-                follow + notify experience.
+              <CardContent className="p-0">
+                {upcomingMatches.length === 0 ? (
+                  <p className="px-6 py-4 text-sm text-muted-foreground">
+                    No matches scheduled yet — check back soon.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-border/40">
+                    {upcomingMatches.map((m) => (
+                      <FixtureRow key={m.id} match={m} variant="upcoming" brandColor={brandColor} />
+                    ))}
+                  </ul>
+                )}
               </CardContent>
             </Card>
+
+            {completedMatches.length > 0 && (
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle>Recent results</CardTitle>
+                  <Badge variant="outline">{completedMatches.length}</Badge>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <ul className="divide-y divide-border/40">
+                    {completedMatches.map((m) => (
+                      <FixtureRow key={m.id} match={m} variant="completed" brandColor={brandColor} />
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           <aside className="space-y-4">
@@ -260,6 +327,125 @@ function Hero({
         )}
       </div>
     </section>
+  );
+}
+
+interface FixtureMatch {
+  id: string;
+  scheduled_at: string;
+  status: string;
+  round: string | null;
+  home_score: number;
+  away_score: number;
+  current_half: number;
+  clock_seconds: number;
+  home_team: { id: string; name: string; short_name: string | null; primary_color: string | null } | null;
+  away_team: { id: string; name: string; short_name: string | null; primary_color: string | null } | null;
+}
+
+function FixtureRow({
+  match,
+  variant,
+  brandColor,
+}: {
+  match: FixtureMatch;
+  variant: 'live' | 'upcoming' | 'completed';
+  brandColor: string | null;
+}) {
+  // @ts-expect-error supabase nested join
+  const home = match.home_team as FixtureMatch['home_team'];
+  // @ts-expect-error supabase nested join
+  const away = match.away_team as FixtureMatch['away_team'];
+  const homeWon = match.home_score > match.away_score;
+  const awayWon = match.away_score > match.home_score;
+  const scheduled = new Date(match.scheduled_at);
+
+  return (
+    <li>
+      <Link
+        href={`/live/${match.id}`}
+        className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-5 py-3 transition-colors hover:bg-muted/30"
+      >
+        {/* Home team */}
+        <div className="flex items-center gap-3 min-w-0">
+          <TeamBadge team={home} />
+          <div className="min-w-0">
+            <div className={`truncate text-sm ${variant === 'completed' && homeWon ? 'font-semibold' : 'font-medium'}`}>
+              {home?.name ?? 'TBD'}
+            </div>
+            {match.round && variant !== 'completed' && (
+              <div className="text-[10px] text-muted-foreground">{match.round}</div>
+            )}
+          </div>
+        </div>
+
+        {/* Center cell — score / time / VS */}
+        <div className="flex flex-col items-center gap-0.5 px-2 text-center">
+          {variant === 'live' && (
+            <>
+              <div className="font-mono text-base font-bold tabular-nums">
+                <span className={homeWon ? 'text-foreground' : 'text-muted-foreground'}>{match.home_score}</span>
+                <span className="text-muted-foreground/40 mx-1">·</span>
+                <span className={awayWon ? 'text-foreground' : 'text-muted-foreground'}>{match.away_score}</span>
+              </div>
+              <Badge variant="live" className="text-[9px]">
+                ● Q{match.current_half}
+              </Badge>
+            </>
+          )}
+          {variant === 'completed' && (
+            <>
+              <div className="font-mono text-base font-bold tabular-nums">
+                <span className={homeWon ? 'text-foreground' : 'text-muted-foreground'}>{match.home_score}</span>
+                <span className="text-muted-foreground/40 mx-1">·</span>
+                <span className={awayWon ? 'text-foreground' : 'text-muted-foreground'}>{match.away_score}</span>
+              </div>
+              <span className="text-[9px] uppercase tracking-wider text-muted-foreground">FT</span>
+            </>
+          )}
+          {variant === 'upcoming' && (
+            <>
+              <div className="text-xs font-medium" style={{ color: brandColor ?? undefined }}>
+                {scheduled.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+              </div>
+              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                <Clock className="h-2.5 w-2.5" />
+                {scheduled.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Away team */}
+        <div className="flex items-center justify-end gap-3 min-w-0">
+          <div className="min-w-0 text-right">
+            <div className={`truncate text-sm ${variant === 'completed' && awayWon ? 'font-semibold' : 'font-medium'}`}>
+              {away?.name ?? 'TBD'}
+            </div>
+            {match.round && variant !== 'completed' && (
+              <div className="text-[10px] text-muted-foreground">{match.round}</div>
+            )}
+          </div>
+          <TeamBadge team={away} />
+          <ArrowRight className="ml-1 h-3 w-3 shrink-0 text-muted-foreground" />
+        </div>
+      </Link>
+    </li>
+  );
+}
+
+function TeamBadge({ team }: { team: FixtureMatch['home_team'] }) {
+  return (
+    <div
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-white"
+      style={{
+        background: team?.primary_color
+          ? `linear-gradient(135deg, ${team.primary_color}, ${team.primary_color}cc)`
+          : 'linear-gradient(135deg, hsl(var(--primary)), #ea580c)',
+      }}
+    >
+      {team?.short_name ?? '??'}
+    </div>
   );
 }
 
