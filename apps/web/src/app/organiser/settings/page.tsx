@@ -128,10 +128,44 @@ export default async function SettingsPage({
                 defaultValue={tenant?.custom_domain ?? ''}
                 className="font-mono"
               />
-              <p className="text-[10px] text-muted-foreground">
-                Point a CNAME to <span className="font-mono">cname.kabaddiadda.com</span>. SSL is
-                provisioned automatically.
-              </p>
+              {tenant?.custom_domain ? (
+                <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 p-3 text-xs">
+                  <div className="flex items-start gap-2">
+                    <Globe className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <div className="space-y-2">
+                      <p className="font-medium text-foreground">Two steps to go live:</p>
+                      <ol className="list-decimal space-y-1.5 pl-4 text-muted-foreground">
+                        <li>
+                          At your DNS provider, add a CNAME record:
+                          <div className="mt-1 grid grid-cols-[80px_1fr] gap-x-2 rounded bg-background/60 p-2 font-mono">
+                            <span className="text-muted-foreground">Host</span>
+                            <span className="break-all text-foreground">{tenant.custom_domain}</span>
+                            <span className="text-muted-foreground">Type</span>
+                            <span className="text-foreground">CNAME</span>
+                            <span className="text-muted-foreground">Target</span>
+                            <span className="break-all text-foreground">cname.vercel-dns.com</span>
+                          </div>
+                        </li>
+                        <li>
+                          In your Vercel project (Project Settings → Domains), add{' '}
+                          <span className="font-mono text-foreground">{tenant.custom_domain}</span>.
+                          SSL is provisioned automatically.
+                        </li>
+                      </ol>
+                      <p className="pt-1 text-[10px] text-muted-foreground">
+                        Once DNS propagates (usually a few minutes), visiting{' '}
+                        <span className="font-mono text-foreground">https://{tenant.custom_domain}</span>{' '}
+                        will load your league page.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[10px] text-muted-foreground">
+                  Add your domain to use a vanity URL like{' '}
+                  <span className="font-mono">yourleague.com</span> instead of the default subdomain.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
