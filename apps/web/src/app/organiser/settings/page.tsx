@@ -24,8 +24,10 @@ export default async function SettingsPage({
     .eq('id', user!.tenantId!)
     .maybeSingle();
 
-  const branding = (tenant?.branding as { primaryColor?: string } | null) ?? null;
+  const branding = (tenant?.branding as { primaryColor?: string; tagline?: string; heroImageUrl?: string } | null) ?? null;
   const primaryColor = branding?.primaryColor ?? '';
+  const tagline = branding?.tagline ?? '';
+  const heroImageUrl = branding?.heroImageUrl ?? '';
 
   const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'kabaddiadda.com';
   const subdomainUrl = `https://${tenant?.slug}.${rootDomain}`;
@@ -179,6 +181,38 @@ export default async function SettingsPage({
               <p className="text-[10px] text-muted-foreground">
                 Hex code (e.g. <span className="font-mono">#f97316</span>). Used for accent CTAs and
                 public-page highlights.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="tagline" className="text-xs">
+                Tagline
+              </Label>
+              <Input
+                id="tagline"
+                name="tagline"
+                placeholder="The premier kabaddi league of West Bengal"
+                defaultValue={tagline}
+                maxLength={120}
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Shown under your league name on the public page. ~120 chars.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="heroImageUrl" className="text-xs">
+                Hero banner image URL
+              </Label>
+              <Input
+                id="heroImageUrl"
+                name="heroImageUrl"
+                type="url"
+                placeholder="https://..."
+                defaultValue={heroImageUrl}
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Optional. Wide image (~1600×400) shown as backdrop on your league&apos;s public page.
               </p>
             </div>
           </CardContent>

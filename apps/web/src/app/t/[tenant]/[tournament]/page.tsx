@@ -74,9 +74,15 @@ export default async function PublicTournamentPage({
     .eq('tournament_id', tournament.id)
     .order('name');
 
+  const branding = (tenant.branding as { primaryColor?: string; tagline?: string } | null) ?? null;
+  const brandColor = branding?.primaryColor ?? null;
+
   return (
-    <div className="min-h-screen bg-background">
-      <Hero tenant={tenant} tournament={tournament} />
+    <div
+      className="min-h-screen bg-background"
+      style={brandColor ? ({ ['--brand-primary' as string]: brandColor } as React.CSSProperties) : undefined}
+    >
+      <Hero tenant={tenant} tournament={tournament} brandColor={brandColor} />
 
       <section className="container mx-auto px-4 py-12">
         <div className="grid gap-8 lg:grid-cols-3">
@@ -209,6 +215,7 @@ export default async function PublicTournamentPage({
 function Hero({
   tenant,
   tournament,
+  brandColor,
 }: {
   tenant: { name: string; slug: string };
   tournament: {
@@ -217,6 +224,7 @@ function Hero({
     status: string;
     cover_image: string | null;
   };
+  brandColor: string | null;
 }) {
   return (
     <section className="relative overflow-hidden border-b border-border/50">
@@ -228,13 +236,20 @@ function Hero({
           style={{ backgroundImage: `url(${tournament.cover_image})` }}
         />
       )}
+      {brandColor && !tournament.cover_image && (
+        <div
+          className="absolute inset-0 opacity-15"
+          style={{ background: `linear-gradient(135deg, ${brandColor}, transparent 60%)` }}
+        />
+      )}
 
       <div className="container relative mx-auto px-4 py-20">
         <Link
           href={`/t/${tenant.slug}`}
-          className="text-sm text-muted-foreground hover:text-foreground"
+          className="text-sm hover:text-foreground"
+          style={{ color: brandColor ?? undefined }}
         >
-          {tenant.name}
+          ← {tenant.name}
         </Link>
         <div className="mt-3 flex items-center gap-3">
           <h1 className="text-4xl font-bold tracking-tight md:text-6xl">{tournament.name}</h1>

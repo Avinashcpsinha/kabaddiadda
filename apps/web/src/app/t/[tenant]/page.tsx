@@ -14,6 +14,12 @@ const FORMAT_LABEL: Record<string, string> = {
   double_elimination: 'Double Elim.',
 };
 
+interface TenantBranding {
+  primaryColor?: string;
+  tagline?: string;
+  heroImageUrl?: string;
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -41,12 +47,17 @@ export default async function PublicTenantPage({
 
   const { data: tenant } = await supabase
     .from('tenants')
-    .select('id, name, slug, logo_url, contact_email')
+    .select('id, name, slug, logo_url, contact_email, branding')
     .eq('slug', slug)
     .eq('status', 'active')
     .maybeSingle();
 
   if (!tenant) notFound();
+
+  const branding = (tenant.branding as TenantBranding | null) ?? null;
+  const brandColor = branding?.primaryColor ?? null;
+  const heroImage = branding?.heroImageUrl ?? null;
+  const tagline = branding?.tagline ?? null;
 
   const { data: tournaments } = await supabase
     .from('tournaments')
@@ -56,7 +67,11 @@ export default async function PublicTenantPage({
     .order('start_date', { ascending: false });
 
   return (
-    <div className="min-h-screen bg-background">
+    <div
+      className="min-h-screen bg-background"
+      // CSS custom property scoped to this microsite — accents below pick it up
+      style={brandColor ? ({ ['--brand-primary' as string]: brandColor } as React.CSSProperties) : undefined}
+    >
       <header className="border-b border-border/50">
         <div className="container mx-auto flex h-14 items-center justify-between px-4">
           <Link href="/">
@@ -66,8 +81,29 @@ export default async function PublicTenantPage({
       </header>
 
       <section className="relative overflow-hidden border-b border-border/50">
-        <div className="absolute inset-0 bg-grid opacity-[0.05]" />
-        <div className="absolute inset-0 bg-radial-fade" />
+        {heroImage ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={heroImage}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+              aria-hidden="true"
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-background via-background/85 to-background/50" />
+          </>
+        ) : (
+          <>
+            <div className="absolute inset-0 bg-grid opacity-[0.05]" />
+            <div className="absolute inset-0 bg-radial-fade" />
+            {brandColor && (
+              <div
+                className="absolute inset-0 opacity-10"
+                style={{ background: `linear-gradient(135deg, ${brandColor}, transparent 60%)` }}
+              />
+            )}
+          </>
+        )}
         <div className="container relative mx-auto px-4 py-16">
           <div className="flex items-center gap-5">
             {tenant.logo_url ? (
@@ -75,19 +111,33 @@ export default async function PublicTenantPage({
               <img
                 src={tenant.logo_url}
                 alt={tenant.name}
-                className="h-16 w-16 rounded-2xl object-cover shadow-xl"
+                className="h-16 w-16 rounded-2xl object-cover shadow-xl ring-2 ring-background"
+                style={brandColor ? { boxShadow: `0 0 0 2px ${brandColor}33, 0 10px 30px ${brandColor}40` } : undefined}
               />
             ) : (
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 shadow-xl">
+              <div
+                className="flex h-16 w-16 items-center justify-center rounded-2xl shadow-xl"
+                style={{
+                  background: brandColor
+                    ? `linear-gradient(135deg, ${brandColor}, ${brandColor}cc)`
+                    : 'linear-gradient(135deg, #f59e0b, #d97706)',
+                }}
+              >
                 <Crown className="h-7 w-7 text-white" />
               </div>
             )}
             <div>
-              <div className="text-xs uppercase tracking-wider text-muted-foreground">
+              <div
+                className="text-xs uppercase tracking-wider"
+                style={{ color: brandColor ?? undefined }}
+              >
                 Kabaddi League
               </div>
               <h1 className="text-4xl font-bold tracking-tight md:text-5xl">{tenant.name}</h1>
-              <div className="mt-1 text-sm text-muted-foreground">
+              {tagline && (
+                <div className="mt-2 max-w-2xl text-sm text-muted-foreground">{tagline}</div>
+              )}
+              <div className="mt-1 text-xs text-muted-foreground">
                 kabaddiadda.com/t/{tenant.slug}
               </div>
             </div>
@@ -112,7 +162,14 @@ export default async function PublicTenantPage({
             {tournaments.map((t) => (
               <Link key={t.id} href={`/t/${tenant.slug}/${t.slug}`}>
                 <Card className="group h-full overflow-hidden transition-all hover:-translate-y-0.5 hover:border-primary/40">
-                  <div className="relative h-20 bg-gradient-to-br from-primary/20 via-orange-500/10 to-transparent">
+                  <div
+                    className="relative h-20"
+                    style={
+                      brandColor
+                        ? { background: `linear-gradient(135deg, ${brandColor}33, ${brandColor}05)` }
+                        : { background: 'linear-gradient(135deg, hsl(var(--primary)/0.2), hsl(var(--primary)/0.05))' }
+                    }
+                  >
                     <div className="absolute inset-0 bg-grid opacity-30" />
                     <div className="absolute right-3 top-3">
                       <StatusBadge status={t.status} />
