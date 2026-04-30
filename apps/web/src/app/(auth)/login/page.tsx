@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { LoginForm } from './login-form';
@@ -15,7 +16,9 @@ export default function LoginPage() {
         <CardDescription>Sign in to continue to Kabaddiadda</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <LoginForm />
+        <Suspense fallback={null}>
+          <LoginForm />
+        </Suspense>
 
         <p className="text-center text-sm text-muted-foreground">
           Don&apos;t have an account?{' '}
