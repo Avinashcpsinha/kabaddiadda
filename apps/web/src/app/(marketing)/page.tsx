@@ -17,6 +17,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { getSessionUser } from '@/lib/auth';
+import { createClient } from '@/lib/supabase/server';
+
+// Marketing home shows live matches across the platform — public, no auth.
+// /live/[matchId] is also public (not in middleware PROTECTED_PREFIXES), so
+// anonymous visitors can click through and watch the scoreboard.
+export const revalidate = 30;
 
 export default async function HomePage() {
   const session = await getSessionUser();
@@ -39,10 +45,24 @@ export default async function HomePage() {
   const fanJoinHref = session ? '/feed' : '/signup';
   const fanJoinLabel = session ? 'Open fan zone' : 'Join as a fan';
 
+  const supabase = await createClient();
+  const { data: liveMatches } = await supabase
+    .from('matches')
+    .select(
+      `id, home_score, away_score, current_half, clock_seconds,
+       home_team:home_team_id(name, short_name, primary_color),
+       away_team:away_team_id(name, short_name, primary_color),
+       tournament:tournament_id(name),
+       tenant:tenant_id(name, logo_url)`,
+    )
+    .eq('status', 'live')
+    .order('updated_at', { ascending: false })
+    .limit(9);
+
   return (
     <>
       <Hero hostHref={hostHref} hostLabel={hostLabel} watchHref={watchHref} />
-      <LiveStrip />
+      <LiveMatchesSection matches={liveMatches ?? []} />
       <Features />
       <RolesSection
         hostHref={hostHref}
@@ -54,6 +74,24 @@ export default async function HomePage() {
       <CTA hostHref={hostHref} hostLabel={hostLabel} />
     </>
   );
+}
+
+interface LiveMatchCard {
+  id: string;
+  home_score: number;
+  away_score: number;
+  current_half: number;
+  clock_seconds: number;
+  home_team: { name: string; short_name: string | null; primary_color: string | null } | null;
+  away_team: { name: string; short_name: string | null; primary_color: string | null } | null;
+  tournament: { name: string } | null;
+  tenant: { name: string; logo_url: string | null } | null;
+}
+
+function formatClock(seconds: number): string {
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const s = (seconds % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
 }
 
 function Hero({
@@ -125,34 +163,118 @@ function Stat({ value, label }: { value: string; label: string }) {
   );
 }
 
-function LiveStrip() {
-  const matches = [
-    { home: 'Bengal Warriors', away: 'Patna Pirates', score: '34 — 28', status: 'LIVE Q4' },
-    { home: 'U Mumba', away: 'Telugu Titans', score: '22 — 19', status: 'LIVE Q3' },
-    { home: 'Jaipur Pink Panthers', away: 'Dabang Delhi', score: '14 — 12', status: 'LIVE Q2' },
-  ];
-  return (
-    <section className="border-y border-border/50 bg-secondary/20 py-3">
-      <div className="container mx-auto flex items-center gap-6 overflow-x-auto px-4 text-sm">
-        <div className="flex shrink-0 items-center gap-2 font-semibold">
+function LiveMatchesSection({ matches }: { matches: LiveMatchCard[] }) {
+  if (matches.length === 0) {
+    return (
+      <section className="border-y border-border/50 bg-secondary/20 py-3">
+        <div className="container mx-auto flex items-center gap-3 px-4 text-sm">
           <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-muted-foreground/40" />
           </span>
-          LIVE NOW
+          <span className="font-semibold text-muted-foreground">No matches live right now</span>
+          <span className="text-muted-foreground">— check back later or browse upcoming fixtures.</span>
         </div>
-        {matches.map((m) => (
-          <div key={m.home} className="flex shrink-0 items-center gap-3">
-            <span className="text-muted-foreground">{m.home}</span>
-            <span className="font-mono font-bold">{m.score}</span>
-            <span className="text-muted-foreground">{m.away}</span>
-            <Badge variant="live" className="text-[10px]">
-              {m.status}
-            </Badge>
+      </section>
+    );
+  }
+
+  return (
+    <section className="border-y border-border/50 bg-secondary/20 py-12">
+      <div className="container mx-auto px-4">
+        <div className="mb-6 flex items-end justify-between">
+          <div>
+            <div className="mb-1 flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+              </span>
+              <span className="text-xs font-semibold uppercase tracking-wider text-red-500">
+                Live now
+              </span>
+            </div>
+            <h2 className="text-2xl font-bold tracking-tight">
+              {matches.length} {matches.length === 1 ? 'match' : 'matches'} on the mat
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Tap any card to watch the scoreboard — no signup needed.
+            </p>
           </div>
-        ))}
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {matches.map((m) => (
+            <Link
+              key={m.id}
+              href={`/live/${m.id}`}
+              className="group block rounded-xl border border-border/60 bg-card p-5 transition-all hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5"
+            >
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2 text-xs">
+                  <Trophy className="h-3 w-3 shrink-0 text-muted-foreground" />
+                  <span className="truncate text-muted-foreground">
+                    {m.tenant?.name ?? 'Organiser'}
+                  </span>
+                </div>
+                <Badge variant="live" className="shrink-0 text-[10px]">
+                  ● LIVE
+                </Badge>
+              </div>
+
+              {m.tournament?.name && (
+                <div className="mb-4 truncate text-xs font-medium text-foreground/80">
+                  {m.tournament.name}
+                </div>
+              )}
+
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                <TeamSide team={m.home_team} score={m.home_score} align="left" />
+                <span className="text-xs font-mono text-muted-foreground">vs</span>
+                <TeamSide team={m.away_team} score={m.away_score} align="right" />
+              </div>
+
+              <div className="mt-4 flex items-center justify-between border-t border-border/40 pt-3 text-xs text-muted-foreground">
+                <span className="font-mono">
+                  Q{m.current_half} · {formatClock(m.clock_seconds)}
+                </span>
+                <span className="flex items-center gap-1 text-primary opacity-0 transition-opacity group-hover:opacity-100">
+                  Watch live
+                  <ArrowRight className="h-3 w-3" />
+                </span>
+              </div>
+            </Link>
+          ))}
+        </div>
       </div>
     </section>
+  );
+}
+
+function TeamSide({
+  team,
+  score,
+  align,
+}: {
+  team: LiveMatchCard['home_team'];
+  score: number;
+  align: 'left' | 'right';
+}) {
+  return (
+    <div className={`flex min-w-0 items-center gap-2 ${align === 'right' ? 'flex-row-reverse text-right' : ''}`}>
+      <div
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-white"
+        style={{
+          background: team?.primary_color
+            ? `linear-gradient(135deg, ${team.primary_color}, ${team.primary_color}cc)`
+            : 'linear-gradient(135deg, hsl(var(--primary)), #ea580c)',
+        }}
+      >
+        {team?.short_name ?? '??'}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium">{team?.name ?? 'TBD'}</div>
+        <div className="font-mono text-xl font-bold tabular-nums">{score}</div>
+      </div>
+    </div>
   );
 }
 
