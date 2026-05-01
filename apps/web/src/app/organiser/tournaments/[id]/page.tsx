@@ -17,6 +17,7 @@ import { getSessionUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { TournamentStatusControl } from './status-control';
 import { DangerDelete } from './danger-delete';
+import { FixturesManageCard } from './fixtures-manage-card';
 
 const FORMAT_LABEL: Record<string, string> = {
   league: 'League · round-robin',
@@ -45,7 +46,7 @@ export default async function TournamentDetailPage({
 
   if (!tournament) notFound();
 
-  const [{ data: tenant }, { count: teamCount }, { count: matchCount }] = await Promise.all([
+  const [{ data: tenant }, { count: teamCount }, { count: matchCount }, { data: teams }] = await Promise.all([
     supabase.from('tenants').select('slug').eq('id', tournament.tenant_id).single(),
     supabase
       .from('teams')
@@ -55,6 +56,13 @@ export default async function TournamentDetailPage({
       .from('matches')
       .select('id', { count: 'exact', head: true })
       .eq('tournament_id', tournament.id),
+    // Pulled here so the Fixtures Manage card can pre-load the AddFixtureModal
+    // without an extra round-trip on click.
+    supabase
+      .from('teams')
+      .select('id, name, short_name')
+      .eq('tournament_id', tournament.id)
+      .order('name'),
   ]);
 
   return (
@@ -130,11 +138,15 @@ export default async function TournamentDetailPage({
               title="Teams & rosters"
               description={`${teamCount ?? 0} registered${tournament.max_teams ? ` of ${tournament.max_teams}` : ''}`}
             />
-            <ManageLink
-              href={`/organiser/tournaments/${tournament.id}/fixtures`}
-              icon={Calendar}
-              title="Fixtures"
-              description={`${matchCount ?? 0} matches scheduled`}
+            <FixturesManageCard
+              tournamentId={tournament.id}
+              tournamentName={tournament.name}
+              matchCount={matchCount ?? 0}
+              teams={(teams ?? []).map((t) => ({
+                id: t.id,
+                name: t.name,
+                short_name: t.short_name ?? null,
+              }))}
             />
             <ManageLink
               href={`/organiser/scoring`}
