@@ -135,14 +135,12 @@ export default async function TournamentDetailPage({
               icon={Calendar}
               title="Fixtures"
               description={`${matchCount ?? 0} matches scheduled`}
-              comingSoon
             />
             <ManageLink
-              href={`/organiser/tournaments/${tournament.id}/scoring`}
+              href={`/organiser/scoring`}
               icon={Trophy}
               title="Live scoring"
-              description="Score matches as they happen"
-              comingSoon
+              description="Open the scoring console for any live match"
             />
           </CardContent>
         </Card>
