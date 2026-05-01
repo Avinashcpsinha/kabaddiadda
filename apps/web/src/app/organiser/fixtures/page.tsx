@@ -145,11 +145,14 @@ export default async function FixturesPage({
           title="No tournaments yet"
           description="Create a tournament first, then add fixtures inside it."
         />
-      ) : !matches || matches.length === 0 ? (
+      ) : filter !== 'all' && (!matches || matches.length === 0) ? (
+        // Only show the global empty state when a status filter is active —
+        // otherwise we want to render the accordions so each tournament shows
+        // its own 'No fixtures yet' body + the Add fixture button in the header.
         <EmptyState
           icon={Calendar}
           title="No fixtures match this filter"
-          description="Try a different filter or generate fixtures from a tournament."
+          description="Try a different filter or expand a tournament to add one."
         />
       ) : (
         <div className="space-y-2">
