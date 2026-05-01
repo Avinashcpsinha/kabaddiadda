@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowRight, Calendar, ExternalLink, Plus, Radio } from 'lucide-react';
+import { ArrowRight, Calendar, ChevronRight, ExternalLink, Plus, Radio, Trophy } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -47,7 +47,7 @@ export default async function FixturesPage({
     query = query.eq('status', filter);
   }
 
-  const [{ data: matches }, { data: tournaments }] = await Promise.all([
+  const [{ data: matches }, { data: tournaments }, { data: allTournaments }] = await Promise.all([
     query,
     supabase
       .from('tournaments')
@@ -55,7 +55,40 @@ export default async function FixturesPage({
       .eq('tenant_id', tenantId)
       .neq('status', 'completed')
       .order('start_date', { ascending: false, nullsFirst: false }),
+    // Full tournament list (incl. completed) so we can group every match
+    // — even completed ones — under their parent tournament header.
+    supabase
+      .from('tournaments')
+      .select('id, name, status, start_date, end_date, format')
+      .eq('tenant_id', tenantId)
+      .order('start_date', { ascending: false, nullsFirst: false }),
   ]);
+
+  // Group matches by tournament_id for the accordion
+  const matchesByTournament = new Map<string, MatchRow[]>();
+  for (const m of (matches ?? []) as unknown as MatchRow[]) {
+    const list = matchesByTournament.get(m.tournament_id) ?? [];
+    list.push(m);
+    matchesByTournament.set(m.tournament_id, list);
+  }
+  // Order tournaments by: live first, then any with matches, then the rest
+  const tournamentList = (allTournaments ?? []) as Array<{
+    id: string;
+    name: string;
+    status: string;
+    start_date: string | null;
+    end_date: string | null;
+    format: string;
+  }>;
+  tournamentList.sort((a, b) => {
+    const aLive = a.status === 'live' ? 0 : 1;
+    const bLive = b.status === 'live' ? 0 : 1;
+    if (aLive !== bLive) return aLive - bLive;
+    const aHas = matchesByTournament.has(a.id) ? 0 : 1;
+    const bHas = matchesByTournament.has(b.id) ? 0 : 1;
+    if (aHas !== bHas) return aHas - bHas;
+    return (b.start_date ?? '').localeCompare(a.start_date ?? '');
+  });
 
   return (
     <div className="space-y-6">
@@ -107,7 +140,13 @@ export default async function FixturesPage({
         ))}
       </div>
 
-      {!matches || matches.length === 0 ? (
+      {tournamentList.length === 0 ? (
+        <EmptyState
+          icon={Trophy}
+          title="No tournaments yet"
+          description="Create a tournament first, then add fixtures inside it."
+        />
+      ) : !matches || matches.length === 0 ? (
         <EmptyState
           icon={Calendar}
           title="No fixtures match this filter"
@@ -115,12 +154,127 @@ export default async function FixturesPage({
         />
       ) : (
         <div className="space-y-2">
+          {tournamentList.map((t) => {
+            const tMatches = matchesByTournament.get(t.id) ?? [];
+            // Skip tournaments with no matching matches when a status filter
+            // is active so the accordion stays focused.
+            if (filter !== 'all' && tMatches.length === 0) return null;
+            // Auto-open if there's a live match here OR the user is filtering
+            // (so they don't have to re-expand on every filter change).
+            const hasLive = tMatches.some(
+              (m) => m.status === 'live' || m.status === 'half_time',
+            );
+            const open = hasLive || filter !== 'all';
+            return (
+              <TournamentAccordion
+                key={t.id}
+                tournament={t}
+                matches={tMatches}
+                open={open}
+              />
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TournamentAccordion({
+  tournament,
+  matches,
+  open,
+}: {
+  tournament: {
+    id: string;
+    name: string;
+    status: string;
+    start_date: string | null;
+    end_date: string | null;
+    format: string;
+  };
+  matches: MatchRow[];
+  open: boolean;
+}) {
+  const liveCount = matches.filter((m) => m.status === 'live' || m.status === 'half_time').length;
+  const upcomingCount = matches.filter((m) => m.status === 'scheduled').length;
+  const completedCount = matches.filter((m) => m.status === 'completed').length;
+
+  return (
+    <details
+      open={open}
+      className="group overflow-hidden rounded-xl border border-border/60 bg-card transition-colors hover:border-primary/30"
+    >
+      <summary className="flex cursor-pointer list-none items-center gap-3 p-4 hover:bg-muted/30">
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
+        <Trophy className="h-4 w-4 shrink-0 text-primary" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold">{tournament.name}</span>
+            {tournament.status === 'live' && <Badge variant="live">● LIVE</Badge>}
+            {tournament.status === 'completed' && (
+              <Badge variant="success" className="text-[10px]">
+                COMPLETED
+              </Badge>
+            )}
+            {tournament.status === 'scheduled' && (
+              <Badge variant="outline" className="text-[10px]">
+                UPCOMING
+              </Badge>
+            )}
+          </div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
+            <span>{matches.length} matches</span>
+            {liveCount > 0 && <span className="text-red-500">● {liveCount} live</span>}
+            {upcomingCount > 0 && <span>{upcomingCount} upcoming</span>}
+            {completedCount > 0 && <span>{completedCount} completed</span>}
+            {tournament.start_date && (
+              <span>
+                {new Date(tournament.start_date).toLocaleDateString('en-IN', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })}
+                {tournament.end_date && (
+                  <>
+                    {' → '}
+                    {new Date(tournament.end_date).toLocaleDateString('en-IN', {
+                      day: 'numeric',
+                      month: 'short',
+                    })}
+                  </>
+                )}
+              </span>
+            )}
+          </div>
+        </div>
+        <Button asChild variant="outline" size="sm" onClick={(e) => e.stopPropagation()}>
+          <Link href={`/organiser/tournaments/${tournament.id}/fixtures`}>
+            <Plus className="h-3 w-3" />
+            Add fixture
+          </Link>
+        </Button>
+      </summary>
+
+      {matches.length === 0 ? (
+        <div className="border-t border-border/40 bg-muted/10 p-4 text-center text-xs text-muted-foreground">
+          No fixtures yet —{' '}
+          <Link
+            href={`/organiser/tournaments/${tournament.id}/fixtures`}
+            className="font-medium text-primary hover:underline"
+          >
+            schedule one
+          </Link>
+          .
+        </div>
+      ) : (
+        <div className="space-y-2 border-t border-border/40 p-3">
           {matches.map((m) => (
             <FixtureRow key={m.id} match={m} />
           ))}
         </div>
       )}
-    </div>
+    </details>
   );
 }
 
