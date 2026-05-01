@@ -44,6 +44,7 @@ import {
   persistTimerStateAction,
   recordCardAction,
   recordMatchEventAction,
+  recordDefenderOutOfBoundsAction,
   recordRaiderOutOfBoundsAction,
   recordSubstitutionAction,
   recordTechPointAction,
@@ -448,6 +449,34 @@ export function ScoringConsole({
     });
   }
 
+  function handleDefenderOut() {
+    if (!isLive) {
+      toast.error('Start the match first.');
+      return;
+    }
+    if (touchedDefenderIds.length === 0) {
+      toast.error('Tap the defender(s) who stepped out first.');
+      return;
+    }
+    withSubmit(async () => {
+      const res = await recordDefenderOutOfBoundsAction({
+        matchId,
+        attackingTeamId: attackingId,
+        raiderId,
+        defenderIds: touchedDefenderIds,
+        half,
+        clockSeconds: clock,
+      });
+      if (!res?.error) {
+        clearSelections();
+        setRaidRunning(false);
+        setRaidLeft(0);
+        toast.success(`Defender out of bounds — attack +${touchedDefenderIds.length}`);
+      }
+      return res;
+    });
+  }
+
   function handleReview(outcome: 'upheld' | 'overturned', teamId: string) {
     withSubmit(async () => {
       const res = await callReviewAction({
@@ -518,6 +547,13 @@ export function ScoringConsole({
     isActive(s.state),
   );
   const touchedCount = touchedDefenderIds.length;
+  // Count defenders currently on mat — used to gate Super Tackle (PKL: only
+  // counts when defending side has ≤3 on mat) and to validate other actions.
+  const defendersOnMatCount = defendingSlots.filter((s) => s.state === 'on_mat').length;
+  const superTackleEligible = defendersOnMatCount > 0 && defendersOnMatCount <= KABADDI.SUPER_TACKLE_DEFENDER_THRESHOLD;
+  // Super Raid requires ≥3 touches (3+ defenders selected) — anything less
+  // can't reach 3 points without a bonus, which the T+B button covers.
+  const superRaidEligible = touchedCount >= 3;
   const attacking = attackingId === home.id ? home : away;
   const defending = attackingId === home.id ? away : home;
 
@@ -990,8 +1026,13 @@ export function ScoringConsole({
                     includeDefenders: true,
                   })
                 }
-                disabled={!isLive || pending}
+                disabled={!isLive || pending || !superRaidEligible}
                 tone="attack"
+                title={
+                  !superRaidEligible
+                    ? 'Super Raid needs ≥3 defenders touched (or use T+B for 2 touches + bonus)'
+                    : undefined
+                }
               />
               <ActionBtn
                 label="All out"
@@ -1030,20 +1071,37 @@ export function ScoringConsole({
                     includeDefenders: true,
                   })
                 }
-                disabled={!isLive || pending}
+                disabled={!isLive || pending || !superTackleEligible}
                 tone="defend"
+                title={
+                  !superTackleEligible
+                    ? `Super Tackle only counts when ≤${KABADDI.SUPER_TACKLE_DEFENDER_THRESHOLD} defenders are on mat (currently ${defendersOnMatCount})`
+                    : undefined
+                }
               />
             </div>
 
             {/* SECONDARY ACTIONS — referee, cards, sub, review, forced out */}
-            <div className="grid shrink-0 grid-cols-3 gap-1.5 border-t border-border/50 pt-3 sm:grid-cols-7">
+            <div className="grid shrink-0 grid-cols-3 gap-1.5 border-t border-border/50 pt-3 sm:grid-cols-8">
               <SmallActionBtn
                 icon={<LogOut className="h-3 w-3" />}
-                label="Forced out"
+                label="Raider out"
                 onClick={handleForcedOut}
                 disabled={!isLive || pending}
                 tone="defend"
                 title="Raider stepped out of bounds — defence +1, raider OUT"
+              />
+              <SmallActionBtn
+                icon={<LogOut className="h-3 w-3" />}
+                label="Defender out"
+                onClick={handleDefenderOut}
+                disabled={!isLive || pending || touchedDefenderIds.length === 0}
+                tone="attack"
+                title={
+                  touchedDefenderIds.length === 0
+                    ? 'Pick the defender who stepped out, then tap'
+                    : `Defender(s) stepped out — attack +${touchedDefenderIds.length}`
+                }
               />
               <SmallActionBtn
                 icon={<ArrowRightLeft className="h-3 w-3" />}

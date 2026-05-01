@@ -478,18 +478,24 @@ async function main() {
               current_attacking_team_id = excluded.current_attacking_team_id
       `;
 
-      // Match lineups (starting 7) for live + completed matches; scheduled gets nothing
+      // Match lineups (starting 7 + bench 3) for live + completed matches;
+      // scheduled gets nothing. Bench is needed so substitutions work in
+      // the scoring console — initialize_match_player_state also auto-fills
+      // bench from the roster (migration 0015) but explicit is better.
       if (status !== 'scheduled') {
         const homeStarters = home.players.slice(0, 7).map((p) => p.id);
+        const homeBench = home.players.slice(7).map((p) => p.id);
         const awayStarters = away.players.slice(0, 7).map((p) => p.id);
+        const awayBench = away.players.slice(7).map((p) => p.id);
         await sql`
           insert into public.match_lineups
-            (id, tenant_id, match_id, team_id, starting_player_ids)
+            (id, tenant_id, match_id, team_id, starting_player_ids, bench_player_ids)
           values
-            (${stableUuid('lineup', matchId, 'home')}, ${tenantId}, ${matchId}, ${home.id}, ${sql.json(homeStarters)}),
-            (${stableUuid('lineup', matchId, 'away')}, ${tenantId}, ${matchId}, ${away.id}, ${sql.json(awayStarters)})
+            (${stableUuid('lineup', matchId, 'home')}, ${tenantId}, ${matchId}, ${home.id}, ${sql.json(homeStarters)}, ${sql.json(homeBench)}),
+            (${stableUuid('lineup', matchId, 'away')}, ${tenantId}, ${matchId}, ${away.id}, ${sql.json(awayStarters)}, ${sql.json(awayBench)})
           on conflict (match_id, team_id) do update
-            set starting_player_ids = excluded.starting_player_ids
+            set starting_player_ids = excluded.starting_player_ids,
+                bench_player_ids = excluded.bench_player_ids
         `;
       }
 
