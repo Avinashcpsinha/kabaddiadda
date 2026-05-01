@@ -1588,7 +1588,8 @@ function PickerColumn({
         </div>
         <span className="text-[10px] text-muted-foreground">{helperText}</span>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">{children}</div>
+      {/* 2-col grid so 7 chips fit in ~4 rows without an inner scroll. */}
+      <div className="grid grid-cols-2 gap-1 content-start">{children}</div>
     </div>
   );
 }
