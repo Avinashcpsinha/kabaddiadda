@@ -46,6 +46,20 @@ export function AddFixtureModal({
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    // Combine separate date + time inputs into the single scheduledAt the
+    // action expects. We use separate inputs because <input type="datetime-local">
+    // has notoriously poor UX in most browsers (no time picker on Firefox,
+    // calendar that doesn't auto-close on Edge/Chrome).
+    const date = String(fd.get('date') ?? '');
+    const time = String(fd.get('time') ?? '');
+    if (!date || !time) {
+      toast.error('Pick a date and time');
+      return;
+    }
+    fd.set('scheduledAt', `${date}T${time}`);
+    fd.delete('date');
+    fd.delete('time');
+
     startTransition(async () => {
       const res = await createMatchAction(tournamentId, fd);
       if (res?.error) {
@@ -75,7 +89,11 @@ export function AddFixtureModal({
 
       <dialog
         ref={dialogRef}
-        className="w-full max-w-md rounded-xl border border-border bg-card p-0 text-card-foreground shadow-2xl backdrop:bg-black/60 backdrop:backdrop-blur-sm"
+        // Native <dialog> opened via showModal() centers itself with margin:auto,
+        // but Tailwind's reset / preflight nukes that. Pin it manually with
+        // fixed positioning + transform-based centering. m-0 prevents any
+        // inherited margin from offsetting it.
+        className="fixed left-1/2 top-1/2 m-0 w-[min(28rem,92vw)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-card p-0 text-card-foreground shadow-2xl backdrop:bg-black/60 backdrop:backdrop-blur-sm"
         onClick={(e) => {
           // Click on the backdrop (dialog itself, not its contents) closes
           if (e.target === e.currentTarget) close();
@@ -146,16 +164,31 @@ export function AddFixtureModal({
                   </Select>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor={`when-${tournamentId}`} className="text-xs">
-                  Date &amp; time
-                </Label>
-                <Input
-                  id={`when-${tournamentId}`}
-                  name="scheduledAt"
-                  type="datetime-local"
-                  required
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor={`date-${tournamentId}`} className="text-xs">
+                    Date
+                  </Label>
+                  <Input
+                    id={`date-${tournamentId}`}
+                    name="date"
+                    type="date"
+                    required
+                    defaultValue={new Date().toISOString().slice(0, 10)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`time-${tournamentId}`} className="text-xs">
+                    Time
+                  </Label>
+                  <Input
+                    id={`time-${tournamentId}`}
+                    name="time"
+                    type="time"
+                    required
+                    defaultValue="19:00"
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
