@@ -248,12 +248,17 @@ function TournamentAccordion({
             )}
           </div>
         </div>
-        <Button asChild variant="outline" size="sm" onClick={(e) => e.stopPropagation()}>
-          <Link href={`/organiser/tournaments/${tournament.id}/fixtures`}>
-            <Plus className="h-3 w-3" />
-            Add fixture
-          </Link>
-        </Button>
+        {/* Plain Link styled as a button — no onClick handler in a server
+            component (Next.js 15 forbids that). The click bubbles to <summary>
+            and toggles the accordion, but we're navigating away so the toggle
+            is invisible. */}
+        <Link
+          href={`/organiser/tournaments/${tournament.id}/fixtures`}
+          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+        >
+          <Plus className="h-3 w-3" />
+          Add fixture
+        </Link>
       </summary>
 
       {matches.length === 0 ? (
