@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowRight, Calendar, ExternalLink, Radio } from 'lucide-react';
+import { ArrowRight, Calendar, ExternalLink, Plus, Radio } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -47,15 +47,49 @@ export default async function FixturesPage({
     query = query.eq('status', filter);
   }
 
-  const { data: matches } = await query;
+  const [{ data: matches }, { data: tournaments }] = await Promise.all([
+    query,
+    supabase
+      .from('tournaments')
+      .select('id, name, status')
+      .eq('tenant_id', tenantId)
+      .neq('status', 'completed')
+      .order('start_date', { ascending: false, nullsFirst: false }),
+  ]);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Fixtures</h1>
-        <p className="mt-1 text-muted-foreground">
-          Every match across every tournament. Filter by status, click any to manage.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Fixtures</h1>
+          <p className="mt-1 text-muted-foreground">
+            Every match across every tournament. Filter by status, click any to manage.
+          </p>
+        </div>
+        {tournaments && tournaments.length > 0 && (
+          <form action="/organiser/fixtures/redirect" method="get" className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Schedule in:</span>
+            <select
+              name="t"
+              defaultValue=""
+              className="rounded-md border border-border bg-background px-2 py-1.5 text-xs"
+            >
+              <option value="" disabled>
+                Pick tournament…
+              </option>
+              {tournaments.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                  {t.status === 'live' ? ' · LIVE' : ''}
+                </option>
+              ))}
+            </select>
+            <Button type="submit" variant="flame" size="sm">
+              <Plus className="h-3 w-3" />
+              Add fixture
+            </Button>
+          </form>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">
