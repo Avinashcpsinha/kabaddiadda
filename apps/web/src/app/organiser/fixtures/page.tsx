@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowRight, Calendar, ChevronRight, ExternalLink, Plus, Radio, Trophy } from 'lucide-react';
+import { ArrowRight, Calendar, ChevronRight, ExternalLink, Radio, Trophy } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/ui/empty';
 import { getSessionUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { initials } from '@/lib/utils';
+import { AddFixtureModal } from './add-fixture-modal';
 
 export const metadata = { title: 'Fixtures' };
 
@@ -47,7 +48,12 @@ export default async function FixturesPage({
     query = query.eq('status', filter);
   }
 
-  const [{ data: matches }, { data: tournaments }, { data: allTournaments }] = await Promise.all([
+  const [
+    { data: matches },
+    { data: tournaments },
+    { data: allTournaments },
+    { data: teams },
+  ] = await Promise.all([
     query,
     supabase
       .from('tournaments')
@@ -62,7 +68,22 @@ export default async function FixturesPage({
       .select('id, name, status, start_date, end_date, format')
       .eq('tenant_id', tenantId)
       .order('start_date', { ascending: false, nullsFirst: false }),
+    // Teams across all tournaments — grouped per-tournament below so each
+    // accordion's Add-fixture modal has its own team picker pre-loaded.
+    supabase
+      .from('teams')
+      .select('id, name, short_name, tournament_id')
+      .eq('tenant_id', tenantId)
+      .order('name'),
   ]);
+
+  const teamsByTournament = new Map<string, Array<{ id: string; name: string; short_name: string | null }>>();
+  for (const t of teams ?? []) {
+    if (!t.tournament_id) continue;
+    const list = teamsByTournament.get(t.tournament_id) ?? [];
+    list.push({ id: t.id, name: t.name, short_name: t.short_name ?? null });
+    teamsByTournament.set(t.tournament_id, list);
+  }
 
   // Group matches by tournament_id for the accordion
   const matchesByTournament = new Map<string, MatchRow[]>();
@@ -90,39 +111,17 @@ export default async function FixturesPage({
     return (b.start_date ?? '').localeCompare(a.start_date ?? '');
   });
 
+  // The top-level "Schedule in" dropdown was replaced by per-tournament
+  // Add-fixture modals inside each accordion (lower-friction UX).
+  void tournaments;
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Fixtures</h1>
-          <p className="mt-1 text-muted-foreground">
-            Every match across every tournament. Filter by status, click any to manage.
-          </p>
-        </div>
-        {tournaments && tournaments.length > 0 && (
-          <form action="/organiser/fixtures/redirect" method="get" className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Schedule in:</span>
-            <select
-              name="t"
-              defaultValue=""
-              className="rounded-md border border-border bg-background px-2 py-1.5 text-xs"
-            >
-              <option value="" disabled>
-                Pick tournament…
-              </option>
-              {tournaments.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                  {t.status === 'live' ? ' · LIVE' : ''}
-                </option>
-              ))}
-            </select>
-            <Button type="submit" variant="flame" size="sm">
-              <Plus className="h-3 w-3" />
-              Add fixture
-            </Button>
-          </form>
-        )}
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Fixtures</h1>
+        <p className="mt-1 text-muted-foreground">
+          Every match across every tournament. Expand a league to see its fixtures or add a new one.
+        </p>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -170,6 +169,7 @@ export default async function FixturesPage({
                 key={t.id}
                 tournament={t}
                 matches={tMatches}
+                teams={teamsByTournament.get(t.id) ?? []}
                 open={open}
               />
             );
@@ -183,6 +183,7 @@ export default async function FixturesPage({
 function TournamentAccordion({
   tournament,
   matches,
+  teams,
   open,
 }: {
   tournament: {
@@ -194,6 +195,7 @@ function TournamentAccordion({
     format: string;
   };
   matches: MatchRow[];
+  teams: Array<{ id: string; name: string; short_name: string | null }>;
   open: boolean;
 }) {
   const liveCount = matches.filter((m) => m.status === 'live' || m.status === 'half_time').length;
@@ -248,17 +250,15 @@ function TournamentAccordion({
             )}
           </div>
         </div>
-        {/* Plain Link styled as a button — no onClick handler in a server
-            component (Next.js 15 forbids that). The click bubbles to <summary>
-            and toggles the accordion, but we're navigating away so the toggle
-            is invisible. */}
-        <Link
-          href={`/organiser/tournaments/${tournament.id}/fixtures`}
-          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
-        >
-          <Plus className="h-3 w-3" />
-          Add fixture
-        </Link>
+        {/* AddFixtureModal is a client component — handles its own click,
+            stops propagation so the accordion does not toggle, opens a
+            native <dialog> with the schedule form, and router.refresh()es
+            on success so the new match shows up immediately. */}
+        <AddFixtureModal
+          tournamentId={tournament.id}
+          tournamentName={tournament.name}
+          teams={teams}
+        />
       </summary>
 
       {matches.length === 0 ? (
