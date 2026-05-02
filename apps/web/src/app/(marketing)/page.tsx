@@ -16,6 +16,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { HeroSceneBg } from '@/components/hero-scene-bg';
+import { AnimatedTagline } from '@/components/animated-tagline';
+import { PhoneMockup } from '@/components/phone-mockup';
 import { getSessionUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 
@@ -153,48 +156,57 @@ function Hero({
 }) {
   return (
     <section className="relative overflow-hidden">
-      <div className="absolute inset-0 bg-grid opacity-[0.05]" />
+      {/* Layered backdrop — stadium action photo + radial flame fade + ambient glow */}
+      <HeroSceneBg src="/hero/kabaddi-action.jpg" />
       <div className="absolute inset-0 bg-radial-fade" />
+      <div className="pointer-events-none absolute -right-32 -top-32 h-[28rem] w-[28rem] rounded-full bg-primary/20 blur-3xl" />
+      <div className="pointer-events-none absolute -left-40 bottom-0 h-[24rem] w-[24rem] rounded-full bg-electric/15 blur-3xl" />
 
-      <div className="container relative mx-auto px-4 py-24 md:py-32">
-        <div className="mx-auto max-w-4xl text-center">
-          <Badge variant="outline" className="mb-6 gap-1.5 border-primary/30 bg-primary/5">
-            <Sparkles className="h-3 w-3 text-primary" />
-            <span className="text-primary">Built for the Kabaddi era</span>
-          </Badge>
+      <div className="container relative mx-auto px-4 py-20 md:py-28">
+        <div className="grid gap-10 lg:grid-cols-12 lg:items-start lg:gap-12">
+          {/* LEFT — editorial copy */}
+          <div className="lg:col-span-7">
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-electric/30 bg-electric/10 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.2em] text-electric">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-electric/60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-electric" />
+              </span>
+              Built for the Kabaddi era
+            </div>
 
-          <h1 className="text-balance text-5xl font-bold tracking-tight sm:text-6xl md:text-7xl">
-            The home of <span className="gradient-text">Kabaddi</span>,
-            <br />
-            built for everyone.
-          </h1>
+            <h1 className="font-display text-balance text-6xl uppercase leading-[0.9] tracking-tight sm:text-7xl md:text-8xl xl:text-9xl">
+              The home of <span className="gradient-text">Kabaddi</span>,
+              <br />
+              <span className="text-stroke-flame">reimagined.</span>
+            </h1>
 
-          <p className="mx-auto mt-6 max-w-2xl text-balance text-lg text-muted-foreground md:text-xl">
-            Run tournaments. Score live matches. Follow your team. One platform for organisers,
-            players, and fans — on web and mobile.
-          </p>
+            <AnimatedTagline />
 
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-            <Button asChild variant="flame" size="xl">
-              <Link href={hostHref}>
-                {hostLabel}
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-            <Button asChild variant="outline" size="xl">
-              <Link href={watchHref}>
-                <PlayCircle className="h-4 w-4" />
-                Watch live
-              </Link>
-            </Button>
+            <div className="mt-10 flex flex-wrap items-center gap-3">
+              <Button asChild variant="flame" size="xl" className="glow-flame">
+                <Link href={hostHref}>
+                  {hostLabel}
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="xl">
+                <Link href={watchHref}>
+                  <PlayCircle className="h-4 w-4" />
+                  Watch live
+                </Link>
+              </Button>
+            </div>
+
+            <div className="mt-14 grid max-w-lg grid-cols-3 gap-6">
+              <Stat value="1.2M+" label="Raids tracked" />
+              <Stat value="450+" label="Tournaments" />
+              <Stat value="98%" label="Scorer satisfaction" />
+            </div>
           </div>
 
-          <div className="mt-14 flex items-center justify-center gap-8 text-sm text-muted-foreground">
-            <Stat value="1.2M+" label="Match raids tracked" />
-            <span className="h-8 w-px bg-border" />
-            <Stat value="450+" label="Tournaments hosted" />
-            <span className="h-8 w-px bg-border" />
-            <Stat value="98%" label="Scorer satisfaction" />
+          {/* RIGHT — floating Kabaddiadda phone mockup */}
+          <div className="lg:col-span-5">
+            <PhoneMockup />
           </div>
         </div>
       </div>
@@ -204,9 +216,13 @@ function Hero({
 
 function Stat({ value, label }: { value: string; label: string }) {
   return (
-    <div className="text-center">
-      <div className="text-2xl font-bold text-foreground">{value}</div>
-      <div className="mt-0.5 text-xs">{label}</div>
+    <div>
+      <div className="font-display tabular-stats text-4xl uppercase leading-none text-foreground md:text-5xl">
+        {value}
+      </div>
+      <div className="mt-2 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+        {label}
+      </div>
     </div>
   );
 }
@@ -227,67 +243,87 @@ function LiveMatchesSection({ matches }: { matches: LiveMatchCard[] }) {
   }
 
   return (
-    <section className="border-y border-border/50 bg-secondary/20 py-12">
-      <div className="container mx-auto px-4">
-        <div className="mb-6 flex items-end justify-between">
+    <section className="relative border-y border-border/50 bg-secondary/30 py-14">
+      <div className="absolute inset-0 bg-noise opacity-[0.04]" aria-hidden />
+      <div className="container relative mx-auto px-4">
+        <div className="mb-8 flex items-end justify-between">
           <div>
-            <div className="mb-1 flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
-              </span>
-              <span className="text-xs font-semibold uppercase tracking-wider text-red-500">
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-live/30 bg-live/10 px-3 py-1">
+              <span className="pulse-live h-2 w-2 rounded-full bg-live" />
+              <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-live">
                 Live now
               </span>
             </div>
-            <h2 className="text-2xl font-bold tracking-tight">
-              {matches.length} {matches.length === 1 ? 'match' : 'matches'} on the mat
+            <h2 className="font-display text-4xl uppercase leading-none tracking-tight md:text-5xl">
+              {matches.length} {matches.length === 1 ? 'match' : 'matches'}{' '}
+              <span className="text-muted-foreground">on the mat</span>
             </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-2 font-editorial text-sm italic text-muted-foreground md:text-base">
               Tap any card to watch the scoreboard — no signup needed.
             </p>
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {matches.map((m) => (
             <Link
               key={m.id}
               href={`/live/${m.id}`}
-              className="group block rounded-xl border border-border/60 bg-card p-5 transition-all hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5"
+              className="group relative block overflow-hidden rounded-2xl border border-border/60 bg-card transition-all hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/15 hover:-translate-y-0.5"
             >
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2 text-xs">
-                  <Trophy className="h-3 w-3 shrink-0 text-muted-foreground" />
-                  <span className="truncate text-muted-foreground">
-                    {m.tenant?.name ?? 'Organiser'}
+              {/* Team-color split strip on top */}
+              <div className="flex h-1 w-full">
+                <div
+                  className="flex-1"
+                  style={{
+                    background:
+                      m.home_team?.primary_color ?? 'hsl(var(--primary))',
+                  }}
+                />
+                <div
+                  className="flex-1"
+                  style={{
+                    background:
+                      m.away_team?.primary_color ?? 'hsl(var(--electric))',
+                  }}
+                />
+              </div>
+
+              <div className="p-5">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+                    <Trophy className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{m.tenant?.name ?? 'Organiser'}</span>
+                  </div>
+                  <span className="pulse-live inline-flex shrink-0 items-center gap-1 rounded-full bg-live px-2 py-0.5 font-display text-[10px] uppercase tracking-wider text-live-foreground">
+                    <span className="h-1.5 w-1.5 rounded-full bg-live-foreground" />
+                    Live
                   </span>
                 </div>
-                <Badge variant="live" className="shrink-0 text-[10px]">
-                  ● LIVE
-                </Badge>
-              </div>
 
-              {m.tournament?.name && (
-                <div className="mb-4 truncate text-xs font-medium text-foreground/80">
-                  {m.tournament.name}
+                {m.tournament?.name && (
+                  <div className="mb-4 truncate font-mono text-[11px] uppercase tracking-[0.15em] text-foreground/80">
+                    {m.tournament.name}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                  <TeamSide team={m.home_team} score={m.home_score} align="left" />
+                  <span className="font-display text-xl uppercase tracking-wider text-muted-foreground">
+                    vs
+                  </span>
+                  <TeamSide team={m.away_team} score={m.away_score} align="right" />
                 </div>
-              )}
 
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                <TeamSide team={m.home_team} score={m.home_score} align="left" />
-                <span className="text-xs font-mono text-muted-foreground">vs</span>
-                <TeamSide team={m.away_team} score={m.away_score} align="right" />
-              </div>
-
-              <div className="mt-4 flex items-center justify-between border-t border-border/40 pt-3 text-xs text-muted-foreground">
-                <span className="font-mono">
-                  Q{m.current_half} · {formatClock(m.clock_seconds)}
-                </span>
-                <span className="flex items-center gap-1 text-primary opacity-0 transition-opacity group-hover:opacity-100">
-                  Watch live
-                  <ArrowRight className="h-3 w-3" />
-                </span>
+                <div className="mt-4 flex items-center justify-between border-t border-border/40 pt-3">
+                  <span className="font-mono tabular-stats text-[11px] uppercase tracking-wider text-muted-foreground">
+                    Q{m.current_half} · {formatClock(m.clock_seconds)}
+                  </span>
+                  <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.15em] text-primary opacity-0 transition-opacity group-hover:opacity-100">
+                    Watch
+                    <ArrowRight className="h-3 w-3" />
+                  </span>
+                </div>
               </div>
             </Link>
           ))}
@@ -406,10 +442,11 @@ function TeamSide({
   score: number;
   align: 'left' | 'right';
 }) {
+  void align;
   return (
-    <div className={`flex min-w-0 items-center gap-2 ${align === 'right' ? 'flex-row-reverse text-right' : ''}`}>
+    <div className="flex min-w-0 flex-col items-center gap-1.5 text-center">
       <div
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-white"
+        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg font-display text-xs uppercase tracking-wider text-white shadow-lg"
         style={{
           background: team?.primary_color
             ? `linear-gradient(135deg, ${team.primary_color}, ${team.primary_color}cc)`
@@ -418,10 +455,10 @@ function TeamSide({
       >
         {team?.short_name ?? '??'}
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium">{team?.name ?? 'TBD'}</div>
-        <div className="font-mono text-xl font-bold tabular-nums">{score}</div>
+      <div className="line-clamp-1 font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+        {team?.name ?? 'TBD'}
       </div>
+      <div className="font-display tabular-stats text-4xl uppercase leading-none">{score}</div>
     </div>
   );
 }

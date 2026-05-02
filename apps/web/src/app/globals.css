@@ -8,6 +8,8 @@
     var(--font-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
     sans-serif;
   --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-display: var(--font-display), 'Anton', Impact, 'Helvetica Neue Condensed', sans-serif;
+  --font-editorial: var(--font-editorial), 'Fraunces', Georgia, 'Times New Roman', serif;
 
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
@@ -31,6 +33,23 @@
 
   --color-mat: hsl(var(--mat));
   --color-mat-line: hsl(var(--mat-line));
+
+  /* Sports/telemetry semantic accents */
+  --color-electric: hsl(var(--electric));
+  --color-electric-foreground: hsl(var(--electric-foreground));
+  --color-victory: hsl(var(--victory));
+  --color-victory-foreground: hsl(var(--victory-foreground));
+  --color-defeat: hsl(var(--defeat));
+  --color-defeat-foreground: hsl(var(--defeat-foreground));
+  --color-gold: hsl(var(--gold));
+  --color-gold-foreground: hsl(var(--gold-foreground));
+  --color-live: hsl(var(--live));
+  --color-live-foreground: hsl(var(--live-foreground));
+
+  /* Team-color slots — components set these inline per match/team */
+  --color-team-primary: hsl(var(--team-primary));
+  --color-team-secondary: hsl(var(--team-secondary));
+  --color-team-foreground: hsl(var(--team-foreground));
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -67,6 +86,23 @@
   --mat: 30 50% 45%;
   --mat-line: 0 0% 100%;
 
+  /* Sports/telemetry accents — light theme */
+  --electric: 190 95% 42%;
+  --electric-foreground: 0 0% 100%;
+  --victory: 142 70% 38%;
+  --victory-foreground: 0 0% 100%;
+  --defeat: 0 72% 50%;
+  --defeat-foreground: 0 0% 100%;
+  --gold: 42 95% 50%;
+  --gold-foreground: 24 30% 12%;
+  --live: 0 90% 50%;
+  --live-foreground: 0 0% 100%;
+
+  /* Default team-color slot (overridable inline) */
+  --team-primary: 16 95% 54%;
+  --team-secondary: 24 10% 96%;
+  --team-foreground: 0 0% 100%;
+
   --radius: 0.75rem;
 }
 
@@ -96,6 +132,22 @@
 
   --mat: 30 60% 35%;
   --mat-line: 0 0% 95%;
+
+  /* Sports/telemetry accents — dark theme (brighter for contrast) */
+  --electric: 190 100% 55%;
+  --electric-foreground: 240 10% 4%;
+  --victory: 142 75% 50%;
+  --victory-foreground: 240 10% 4%;
+  --defeat: 0 85% 60%;
+  --defeat-foreground: 0 0% 100%;
+  --gold: 42 100% 60%;
+  --gold-foreground: 240 10% 4%;
+  --live: 0 95% 60%;
+  --live-foreground: 0 0% 100%;
+
+  --team-primary: 16 100% 60%;
+  --team-secondary: 240 5% 12%;
+  --team-foreground: 0 0% 100%;
 }
 
 @layer base {
@@ -142,5 +194,126 @@
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+  }
+
+  /* Telemetry / data feel — tabular numerals for stats */
+  .tabular-stats {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  /* Outlined display text — broadcast graphics vibe */
+  .text-stroke {
+    -webkit-text-stroke: 1px hsl(var(--foreground));
+    color: transparent;
+  }
+  .text-stroke-flame {
+    -webkit-text-stroke: 1.5px hsl(var(--primary));
+    color: transparent;
+  }
+  .text-stroke-thick {
+    -webkit-text-stroke: 2px hsl(var(--foreground));
+    color: transparent;
+  }
+
+  /* Halo glows for star elements */
+  .glow-flame {
+    box-shadow:
+      0 0 40px -8px hsl(var(--primary) / 0.55),
+      0 0 90px -20px hsl(var(--primary) / 0.35);
+  }
+  .glow-electric {
+    box-shadow:
+      0 0 40px -8px hsl(var(--electric) / 0.6),
+      0 0 90px -20px hsl(var(--electric) / 0.35);
+  }
+  .glow-gold {
+    box-shadow:
+      0 0 40px -8px hsl(var(--gold) / 0.55),
+      0 0 90px -20px hsl(var(--gold) / 0.35);
+  }
+  .glow-live {
+    box-shadow:
+      0 0 30px -4px hsl(var(--live) / 0.7),
+      0 0 70px -16px hsl(var(--live) / 0.4);
+  }
+
+  /* Kabaddi mat lines — for visualizations / decorative panels */
+  .bg-mat-lines {
+    background-color: hsl(var(--mat));
+    background-image:
+      linear-gradient(to right, hsl(var(--mat-line) / 0.35) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--mat-line) / 0.35) 1px, transparent 1px);
+    background-size: 80px 80px;
+  }
+
+  /* Diagonal slash — versus / split-screen energy */
+  .bg-diagonal-slash {
+    background: linear-gradient(
+      115deg,
+      hsl(var(--card)) 0%,
+      hsl(var(--card)) 49.5%,
+      hsl(var(--primary) / 0.35) 49.5%,
+      hsl(var(--primary) / 0.35) 50.5%,
+      hsl(var(--card)) 50.5%,
+      hsl(var(--card)) 100%
+    );
+  }
+
+  /* Subtle film-grain noise — adds texture to flat backgrounds */
+  .bg-noise {
+    background-image: url("data:image/svg+xml;utf8,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
+  }
+
+  /* Stadium scoreboard grid — slowly drifts like a videowall */
+  .bg-stadium-grid {
+    background-image:
+      linear-gradient(to right, hsl(var(--electric) / 0.18) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--electric) / 0.18) 1px, transparent 1px);
+    background-size: 48px 48px;
+    animation: stadium-drift 60s linear infinite;
+  }
+  @keyframes stadium-drift {
+    from {
+      background-position: 0 0;
+    }
+    to {
+      background-position: 48px 48px;
+    }
+  }
+
+  /* Live pulse — for "LIVE" pills and active match indicators */
+  .pulse-live {
+    animation: pulse-live 1.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  @keyframes pulse-live {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 hsl(var(--live) / 0.6);
+    }
+    50% {
+      box-shadow: 0 0 0 10px hsl(var(--live) / 0);
+    }
+  }
+
+  /* Team-color theming — apply via inline style, e.g.:
+     style={{ '--team-primary': '210 90% 50%' }}                 */
+  .team-bg {
+    background-color: hsl(var(--team-primary));
+    color: hsl(var(--team-foreground));
+  }
+  .team-border {
+    border-color: hsl(var(--team-primary));
+  }
+  .team-text {
+    color: hsl(var(--team-primary));
+  }
+  .team-gradient {
+    background: linear-gradient(
+      135deg,
+      hsl(var(--team-primary)) 0%,
+      hsl(var(--team-primary) / 0.6) 100%
+    );
+    color: hsl(var(--team-foreground));
   }
 }
