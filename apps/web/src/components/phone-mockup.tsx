@@ -31,7 +31,7 @@ export function PhoneMockup() {
           ease: 'easeInOut',
         },
       }}
-      className="relative mx-auto max-w-[260px] lg:max-w-[280px]"
+      className="relative mx-auto max-w-[200px] sm:max-w-[240px] lg:max-w-[280px]"
     >
       {/* halo */}
       <div
@@ -40,7 +40,7 @@ export function PhoneMockup() {
       />
 
       {/* phone frame */}
-      <div className="glow-flame relative aspect-[9/19] -rotate-3 rounded-[2.5rem] border-[10px] border-foreground/15 bg-background p-1.5 shadow-2xl transition-transform duration-700 hover:rotate-0">
+      <div className="glow-flame relative aspect-[9/19] -rotate-1 rounded-[2.5rem] border-[8px] border-foreground/15 bg-background p-1 shadow-2xl transition-transform duration-700 hover:rotate-0 sm:border-[10px] sm:p-1.5 lg:-rotate-3">
         {/* screen */}
         <div className="relative h-full w-full overflow-hidden rounded-[2rem] bg-gradient-to-br from-card via-secondary to-background">
           {/* Dynamic Island */}

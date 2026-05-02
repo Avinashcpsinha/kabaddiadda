@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import { KabaddiMatBg } from './kabaddi-mat-bg';
 
 interface HeroSceneBgProps {
   src?: string;
@@ -6,10 +7,13 @@ interface HeroSceneBgProps {
 }
 
 /**
- * Hero backdrop. Pass `src` to use a real photo (Next.js Image handles
- * AVIF/WebP + responsive sizes automatically). When omitted, falls back to a
- * stylized 3-tier stadium crowd silhouette so the empty state still reads as
- * a sport scene.
+ * Hero backdrop — theme-split.
+ *   Dark  : cinematic action photo (or crowd silhouette fallback) + heavy scrim.
+ *   Light : clean perspective Kabaddi mat — no photo, premium editorial feel.
+ *
+ * Pass `src` to use a real photo in dark mode. Next.js Image handles
+ * AVIF/WebP + responsive sizes automatically. When omitted, falls back to a
+ * stylized 3-tier stadium crowd silhouette.
  */
 export function HeroSceneBg({
   src,
@@ -17,27 +21,36 @@ export function HeroSceneBg({
 }: HeroSceneBgProps) {
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-      {src ? (
-        <Image
-          src={src}
-          alt={alt}
-          fill
-          priority
-          sizes="100vw"
-          className="object-cover object-[center_65%]"
-        />
-      ) : (
-        <CrowdSilhouette />
-      )}
+      {/* MOBILE (any theme) — clean perspective mat. The action photo is too
+          busy on small screens (its built-in scoreboard graphic + sponsor
+          banners fight the headline). Reserve photo for tablet+. */}
+      <div className="md:hidden">
+        <KabaddiMatBg />
+      </div>
 
-      {/* Adaptive scrim — keeps headline + scoreboard legible in BOTH themes.
-          Light theme: heavy white wash so the warm photo doesn't muddy black text.
-          Dark theme:  lighter wash so the action shows through richly.        */}
-      <div className="absolute inset-0 bg-background/78 dark:bg-background/35" />
-      {/* Subtle right-corner fade — kept narrow so the raiders show through */}
-      <div className="absolute inset-y-0 right-0 hidden w-1/5 bg-gradient-to-l from-background/60 to-transparent lg:block" />
-      {/* Bottom vignette so stat counters + buttons sit on solid ground */}
-      <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-background via-background/55 to-transparent" />
+      {/* TABLET+ LIGHT — perspective mat */}
+      <div className="hidden md:block dark:md:hidden">
+        <KabaddiMatBg />
+      </div>
+
+      {/* TABLET+ DARK — cinematic photo + scrim */}
+      <div className="hidden md:dark:block">
+        {src ? (
+          <Image
+            src={src}
+            alt={alt}
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover object-[center_65%]"
+          />
+        ) : (
+          <CrowdSilhouette />
+        )}
+        <div className="absolute inset-0 bg-background/35" />
+        <div className="absolute inset-y-0 right-0 hidden w-1/5 bg-gradient-to-l from-background/60 to-transparent lg:block" />
+        <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-background via-background/55 to-transparent" />
+      </div>
     </div>
   );
 }

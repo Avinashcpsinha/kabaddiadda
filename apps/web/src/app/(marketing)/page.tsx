@@ -162,11 +162,11 @@ function Hero({
       <div className="pointer-events-none absolute -right-32 -top-32 h-[28rem] w-[28rem] rounded-full bg-primary/20 blur-3xl" />
       <div className="pointer-events-none absolute -left-40 bottom-0 h-[24rem] w-[24rem] rounded-full bg-electric/15 blur-3xl" />
 
-      <div className="container relative mx-auto px-4 py-20 md:py-28">
-        <div className="grid gap-10 lg:grid-cols-12 lg:items-start lg:gap-12">
+      <div className="container relative mx-auto px-4 py-12 md:py-20 lg:py-28">
+        <div className="grid gap-8 lg:grid-cols-12 lg:items-start lg:gap-12">
           {/* LEFT — editorial copy */}
           <div className="lg:col-span-7">
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-electric/30 bg-electric/10 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.2em] text-electric">
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-electric/30 bg-electric/10 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.2em] text-electric sm:text-[11px]">
               <span className="relative flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-electric/60" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-electric" />
@@ -174,15 +174,15 @@ function Hero({
               Built for the Kabaddi era
             </div>
 
-            <h1 className="font-display text-balance text-6xl uppercase leading-[0.9] tracking-tight sm:text-7xl md:text-8xl xl:text-9xl">
+            <h1 className="font-display text-balance text-4xl uppercase leading-[0.9] tracking-tight sm:text-5xl md:text-7xl lg:text-8xl xl:text-9xl">
               The home of <span className="gradient-text">Kabaddi</span>,
               <br />
-              <span className="text-stroke-flame">reimagined.</span>
+              <span className="text-primary md:text-stroke-flame">reimagined.</span>
             </h1>
 
             <AnimatedTagline />
 
-            <div className="mt-10 flex flex-wrap items-center gap-3">
+            <div className="mt-8 flex flex-wrap items-center gap-3 md:mt-10">
               <Button asChild variant="flame" size="xl" className="glow-flame">
                 <Link href={hostHref}>
                   {hostLabel}
@@ -197,7 +197,7 @@ function Hero({
               </Button>
             </div>
 
-            <div className="mt-14 grid max-w-lg grid-cols-3 gap-6">
+            <div className="mt-10 grid max-w-lg grid-cols-3 gap-4 md:mt-14 md:gap-6">
               <Stat value="1.2M+" label="Raids tracked" />
               <Stat value="450+" label="Tournaments" />
               <Stat value="98%" label="Scorer satisfaction" />
@@ -217,10 +217,10 @@ function Hero({
 function Stat({ value, label }: { value: string; label: string }) {
   return (
     <div>
-      <div className="font-display tabular-stats text-4xl uppercase leading-none text-foreground md:text-5xl">
+      <div className="font-display tabular-stats text-2xl uppercase leading-none text-foreground sm:text-3xl md:text-4xl lg:text-5xl">
         {value}
       </div>
-      <div className="mt-2 font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+      <div className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground sm:mt-2 sm:text-[10px]">
         {label}
       </div>
     </div>
@@ -243,18 +243,18 @@ function LiveMatchesSection({ matches }: { matches: LiveMatchCard[] }) {
   }
 
   return (
-    <section className="relative border-y border-border/50 bg-secondary/30 py-14">
+    <section className="relative border-y border-border/50 bg-secondary/30 py-10 md:py-14">
       <div className="absolute inset-0 bg-noise opacity-[0.04]" aria-hidden />
       <div className="container relative mx-auto px-4">
-        <div className="mb-8 flex items-end justify-between">
+        <div className="mb-6 md:mb-8">
           <div>
             <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-live/30 bg-live/10 px-3 py-1">
               <span className="pulse-live h-2 w-2 rounded-full bg-live" />
-              <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-live">
+              <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-live sm:text-[11px]">
                 Live now
               </span>
             </div>
-            <h2 className="font-display text-4xl uppercase leading-none tracking-tight md:text-5xl">
+            <h2 className="font-display text-3xl uppercase leading-none tracking-tight sm:text-4xl md:text-5xl">
               {matches.length} {matches.length === 1 ? 'match' : 'matches'}{' '}
               <span className="text-muted-foreground">on the mat</span>
             </h2>
