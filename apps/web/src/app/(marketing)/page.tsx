@@ -242,94 +242,196 @@ function LiveMatchesSection({ matches }: { matches: LiveMatchCard[] }) {
     );
   }
 
+  const [featured, ...rest] = matches;
+
   return (
     <section className="relative border-y border-border/50 bg-secondary/30 py-10 md:py-14">
       <div className="absolute inset-0 bg-noise opacity-[0.04]" aria-hidden />
       <div className="container relative mx-auto px-4">
         <div className="mb-6 md:mb-8">
-          <div>
-            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-live/30 bg-live/10 px-3 py-1">
-              <span className="pulse-live h-2 w-2 rounded-full bg-live" />
-              <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-live sm:text-[11px]">
-                Live now
-              </span>
-            </div>
-            <h2 className="font-display text-3xl uppercase leading-none tracking-tight sm:text-4xl md:text-5xl">
-              {matches.length} {matches.length === 1 ? 'match' : 'matches'}{' '}
-              <span className="text-muted-foreground">on the mat</span>
-            </h2>
-            <p className="mt-2 font-editorial text-sm italic text-muted-foreground md:text-base">
-              Tap any card to watch the scoreboard — no signup needed.
-            </p>
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-live/30 bg-live/10 px-3 py-1">
+            <span className="pulse-live h-2 w-2 rounded-full bg-live" />
+            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-live sm:text-[11px]">
+              Live now
+            </span>
           </div>
+          <h2 className="font-display text-3xl uppercase leading-none tracking-tight sm:text-4xl md:text-5xl">
+            {matches.length} {matches.length === 1 ? 'match' : 'matches'}{' '}
+            <span className="text-muted-foreground">on the mat</span>
+          </h2>
+          <p className="mt-2 font-editorial text-sm italic text-muted-foreground md:text-base">
+            Tap any card to watch the scoreboard — no signup needed.
+          </p>
         </div>
 
-        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {matches.map((m) => (
-            <Link
-              key={m.id}
-              href={`/live/${m.id}`}
-              className="group relative block overflow-hidden rounded-2xl border border-border/60 bg-card transition-all hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/15 hover:-translate-y-0.5"
-            >
-              {/* Team-color split strip on top */}
-              <div className="flex h-1 w-full">
-                <div
-                  className="flex-1"
-                  style={{
-                    background:
-                      m.home_team?.primary_color ?? 'hsl(var(--primary))',
-                  }}
-                />
-                <div
-                  className="flex-1"
-                  style={{
-                    background:
-                      m.away_team?.primary_color ?? 'hsl(var(--electric))',
-                  }}
-                />
-              </div>
+        {/* HERO match — full-width split-color drama */}
+        <FeaturedMatchCard match={featured} />
 
-              <div className="p-5">
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-                    <Trophy className="h-3 w-3 shrink-0" />
-                    <span className="truncate">{m.tenant?.name ?? 'Organiser'}</span>
-                  </div>
-                  <span className="pulse-live inline-flex shrink-0 items-center gap-1 rounded-full bg-live px-2 py-0.5 font-display text-[10px] uppercase tracking-wider text-live-foreground">
-                    <span className="h-1.5 w-1.5 rounded-full bg-live-foreground" />
-                    Live
-                  </span>
-                </div>
-
-                {m.tournament?.name && (
-                  <div className="mb-4 truncate font-mono text-[11px] uppercase tracking-[0.15em] text-foreground/80">
-                    {m.tournament.name}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                  <TeamSide team={m.home_team} score={m.home_score} align="left" />
-                  <span className="font-display text-xl uppercase tracking-wider text-muted-foreground">
-                    vs
-                  </span>
-                  <TeamSide team={m.away_team} score={m.away_score} align="right" />
-                </div>
-
-                <div className="mt-4 flex items-center justify-between border-t border-border/40 pt-3">
-                  <span className="font-mono tabular-stats text-[11px] uppercase tracking-wider text-muted-foreground">
-                    Q{m.current_half} · {formatClock(m.clock_seconds)}
-                  </span>
-                  <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.15em] text-primary opacity-0 transition-opacity group-hover:opacity-100">
-                    Watch
-                    <ArrowRight className="h-3 w-3" />
-                  </span>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+        {rest.length > 0 && (
+          <>
+            <h3 className="mb-3 mt-8 inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
+              <span className="pulse-live h-1.5 w-1.5 rounded-full bg-live" />
+              Also live now
+            </h3>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {rest.map((m) => (
+                <CompactMatchCard key={m.id} match={m} />
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </section>
+  );
+}
+
+function FeaturedMatchCard({ match }: { match: LiveMatchCard }) {
+  const homeColor = match.home_team?.primary_color ?? '#ea580c';
+  const awayColor = match.away_team?.primary_color ?? '#0ea5e9';
+  return (
+    <Link
+      href={`/live/${match.id}`}
+      className="group relative block overflow-hidden rounded-3xl border border-border/60 transition-all hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/25"
+    >
+      {/* Split team-color background — left half home, right half away */}
+      <div aria-hidden className="absolute inset-0">
+        <div
+          className="absolute inset-y-0 left-0 w-1/2"
+          style={{ background: `linear-gradient(135deg, ${homeColor}, ${homeColor}cc)` }}
+        />
+        <div
+          className="absolute inset-y-0 right-0 w-1/2"
+          style={{ background: `linear-gradient(225deg, ${awayColor}, ${awayColor}cc)` }}
+        />
+        <div className="absolute inset-0 bg-background/40 dark:bg-background/55" />
+        <div className="absolute inset-0 bg-noise opacity-30" />
+      </div>
+
+      <div className="relative px-5 py-7 md:px-8 md:py-10 lg:py-12">
+        <div className="mb-5 flex flex-wrap items-center gap-2 md:gap-3">
+          <span className="pulse-live inline-flex items-center gap-1.5 rounded-full bg-live px-2.5 py-1 font-display text-[11px] uppercase tracking-wider text-live-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-live-foreground" />
+            Live · Q{match.current_half} · {formatClock(match.clock_seconds)}
+          </span>
+          <span className="truncate font-mono text-[10px] uppercase tracking-[0.15em] text-foreground/80 md:text-[11px]">
+            {match.tournament?.name ?? match.tenant?.name ?? '—'}
+          </span>
+          <span className="ml-auto hidden font-display text-[11px] uppercase tracking-[0.25em] text-foreground/60 md:inline">
+            ◇ Match of the moment
+          </span>
+        </div>
+
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 md:gap-6">
+          <FeaturedTeam team={match.home_team} score={match.home_score} />
+          <span className="font-display text-3xl uppercase tracking-wider text-foreground/50 md:text-5xl lg:text-6xl">
+            vs
+          </span>
+          <FeaturedTeam team={match.away_team} score={match.away_score} />
+        </div>
+
+        <div className="mt-6 flex items-center justify-between border-t border-foreground/15 pt-4 md:mt-8">
+          <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-foreground/70 md:text-[11px]">
+            <span className="h-1 w-1 rounded-full bg-electric" />
+            Tap to watch
+          </span>
+          <span className="flex items-center gap-1 font-display text-sm uppercase tracking-wider text-foreground transition-transform group-hover:translate-x-1">
+            Watch live
+            <ArrowRight className="h-4 w-4" />
+          </span>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function FeaturedTeam({ team, score }: { team: LiveMatchCard['home_team']; score: number }) {
+  return (
+    <div className="flex min-w-0 flex-col items-center gap-1.5 text-center md:gap-2.5">
+      <div
+        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl font-display text-xs uppercase tracking-wider text-white shadow-xl md:h-16 md:w-16 md:text-base lg:h-20 lg:w-20 lg:text-lg"
+        style={{
+          background: team?.primary_color
+            ? `linear-gradient(135deg, ${team.primary_color}, ${team.primary_color}cc)`
+            : 'linear-gradient(135deg, hsl(var(--primary)), #ea580c)',
+        }}
+      >
+        {team?.short_name ?? '??'}
+      </div>
+      <div className="line-clamp-1 font-mono text-[9px] uppercase tracking-[0.15em] text-foreground/85 md:text-[11px]">
+        {team?.name ?? 'TBD'}
+      </div>
+      <div className="font-display tabular-stats text-5xl uppercase leading-none text-foreground drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)] md:text-7xl lg:text-8xl">
+        {score}
+      </div>
+    </div>
+  );
+}
+
+function CompactMatchCard({ match }: { match: LiveMatchCard }) {
+  return (
+    <Link
+      href={`/live/${match.id}`}
+      className="group relative block overflow-hidden rounded-xl border border-border/60 bg-card transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-0.5"
+    >
+      <div className="flex h-0.5 w-full">
+        <div
+          className="flex-1"
+          style={{ background: match.home_team?.primary_color ?? 'hsl(var(--primary))' }}
+        />
+        <div
+          className="flex-1"
+          style={{ background: match.away_team?.primary_color ?? 'hsl(var(--electric))' }}
+        />
+      </div>
+
+      <div className="p-3">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="truncate font-mono text-[9px] uppercase tracking-[0.15em] text-muted-foreground">
+            {match.tournament?.name ?? match.tenant?.name ?? '—'}
+          </span>
+          <span className="pulse-live inline-flex shrink-0 items-center gap-1 rounded-full bg-live px-1.5 py-px font-display text-[9px] uppercase tracking-wider text-live-foreground">
+            <span className="h-1 w-1 rounded-full bg-live-foreground" />
+            Live
+          </span>
+        </div>
+
+        {/* Horizontal team rows — visually distinct from the featured card */}
+        <div className="space-y-1.5">
+          <CompactTeamRow team={match.home_team} score={match.home_score} />
+          <CompactTeamRow team={match.away_team} score={match.away_score} />
+        </div>
+
+        <div className="mt-2 flex items-center justify-between border-t border-border/40 pt-2 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+          <span className="tabular-stats">
+            Q{match.current_half} · {formatClock(match.clock_seconds)}
+          </span>
+          <span className="text-primary opacity-0 transition-opacity group-hover:opacity-100">
+            →
+          </span>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function CompactTeamRow({ team, score }: { team: LiveMatchCard['home_team']; score: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md font-display text-[8px] uppercase tracking-wider text-white shadow-sm"
+        style={{
+          background: team?.primary_color
+            ? `linear-gradient(135deg, ${team.primary_color}, ${team.primary_color}cc)`
+            : 'linear-gradient(135deg, hsl(var(--primary)), #ea580c)',
+        }}
+      >
+        {team?.short_name ?? '??'}
+      </div>
+      <div className="min-w-0 flex-1 truncate font-mono text-[10px] uppercase tracking-wider">
+        {team?.name ?? 'TBD'}
+      </div>
+      <div className="font-display tabular-stats text-2xl uppercase leading-none">{score}</div>
+    </div>
   );
 }
 
