@@ -10,6 +10,7 @@ import {
   Eye,
   Flame,
   Gavel,
+  HelpCircle,
   LogOut,
   Minus,
   Pause,
@@ -42,6 +43,7 @@ import {
   deleteMatchEventAction,
   expireCardAction,
   persistTimerStateAction,
+  recordBonusPlusTackleAction,
   recordCardAction,
   recordMatchEventAction,
   recordDefenderOutOfBoundsAction,
@@ -217,6 +219,7 @@ export function ScoringConsole({
     | { kind: 'card'; color: 'green' | 'yellow' | 'red'; teamId: string }
     | { kind: 'sub'; teamId: string }
     | { kind: 'review'; teamId: string }
+    | { kind: 'help' }
   >(null);
 
   const isLive = status === 'live';
@@ -431,6 +434,10 @@ export function ScoringConsole({
       toast.error('Start the match first.');
       return;
     }
+    if (!raiderId) {
+      toast.error('Pick the raider who went out first.');
+      return;
+    }
     withSubmit(async () => {
       const res = await recordRaiderOutOfBoundsAction({
         matchId,
@@ -438,12 +445,43 @@ export function ScoringConsole({
         raiderId,
         half,
         clockSeconds: clock,
+        reason: 'raider_out_of_bounds',
       });
       if (!res?.error) {
         clearSelections();
         setRaidRunning(false);
         setRaidLeft(0);
-        toast.success('Raider out of bounds — defence +1');
+        toast.success('Raider out — defence +1');
+      }
+      return res;
+    });
+  }
+
+  // Raider voluntarily exits the field (no defender pressure).
+  // Same scoring as forced-out; tagged differently for stats.
+  function handleRaiderSelfOut() {
+    if (!isLive) {
+      toast.error('Start the match first.');
+      return;
+    }
+    if (!raiderId) {
+      toast.error('Pick the raider who self-exited first.');
+      return;
+    }
+    withSubmit(async () => {
+      const res = await recordRaiderOutOfBoundsAction({
+        matchId,
+        attackingTeamId: attackingId,
+        raiderId,
+        half,
+        clockSeconds: clock,
+        reason: 'raider_self_out',
+      });
+      if (!res?.error) {
+        clearSelections();
+        setRaidRunning(false);
+        setRaidLeft(0);
+        toast.success('Self out — defence +1');
       }
       return res;
     });
@@ -466,12 +504,75 @@ export function ScoringConsole({
         defenderIds: touchedDefenderIds,
         half,
         clockSeconds: clock,
+        reason: 'defender_out_of_bounds',
       });
       if (!res?.error) {
         clearSelections();
         setRaidRunning(false);
         setRaidLeft(0);
         toast.success(`Defender out of bounds — attack +${touchedDefenderIds.length}`);
+      }
+      return res;
+    });
+  }
+
+  // Bonus + Tackle — raider crossed the bonus line (attack +1) and was
+  // then tackled before reaching mid-line (defence +1, raider OUT).
+  // Single event so the raid is logged as one continuous play.
+  function handleBonusPlusTackle() {
+    if (!isLive) {
+      toast.error('Start the match first.');
+      return;
+    }
+    if (!raiderId) {
+      toast.error('Pick the raider first.');
+      return;
+    }
+    withSubmit(async () => {
+      const res = await recordBonusPlusTackleAction({
+        matchId,
+        attackingTeamId: attackingId,
+        raiderId,
+        defenderIds: touchedDefenderIds,
+        half,
+        clockSeconds: clock,
+      });
+      if (!res?.error) {
+        clearSelections();
+        setRaidRunning(false);
+        setRaidLeft(0);
+        toast.success('Bonus + Tackle — attack +1, defence +1');
+      }
+      return res;
+    });
+  }
+
+  // Defender voluntarily steps off the mat (tactical / unforced).
+  // Same scoring as defender-out; tagged differently for stats.
+  function handleDefenderSelfOut() {
+    if (!isLive) {
+      toast.error('Start the match first.');
+      return;
+    }
+    if (touchedDefenderIds.length === 0) {
+      toast.error('Tap the defender(s) who self-exited first.');
+      return;
+    }
+    withSubmit(async () => {
+      const res = await recordDefenderOutOfBoundsAction({
+        matchId,
+        attackingTeamId: attackingId,
+        raiderId,
+        defenderIds: touchedDefenderIds,
+        half,
+        clockSeconds: clock,
+        reason: 'defender_self_out',
+      });
+      if (!res?.error) {
+        clearSelections();
+        setRaidRunning(false);
+        setRaidLeft(0);
+        toast.success(`Defender self-out — attack +${touchedDefenderIds.length}`);
       }
       return res;
     });
@@ -981,7 +1082,7 @@ export function ScoringConsole({
             </div>
 
             {/* Action buttons row — single horizontal grid */}
-            <div className="grid shrink-0 grid-cols-4 gap-1.5 border-t border-border/50 pt-3 sm:grid-cols-8">
+            <div className="grid shrink-0 grid-cols-4 gap-1.5 border-t border-border/50 pt-3 sm:grid-cols-9">
               <ActionBtn
                 icon={<Target />}
                 label="Touch"
@@ -1049,6 +1150,19 @@ export function ScoringConsole({
                 tone="neutral"
               />
               <ActionBtn
+                icon={<Flame />}
+                label="B+T"
+                sub="1|1"
+                onClick={handleBonusPlusTackle}
+                disabled={!isLive || pending || !raiderId}
+                tone="neutral"
+                title={
+                  !raiderId
+                    ? 'Pick the raider first — Bonus + Tackle: raider got bonus then was tackled, attack +1, defence +1, raider OUT (defender chip optional, credits the tackle)'
+                    : 'Bonus + Tackle — raider got bonus then was tackled before mid-line. Attack +1, defence +1, raider OUT.'
+                }
+              />
+              <ActionBtn
                 icon={<Shield />}
                 label="Tackle"
                 sub="+1"
@@ -1081,15 +1195,31 @@ export function ScoringConsole({
               />
             </div>
 
-            {/* SECONDARY ACTIONS — referee, cards, sub, review, forced out */}
-            <div className="grid shrink-0 grid-cols-3 gap-1.5 border-t border-border/50 pt-3 sm:grid-cols-8">
+            {/* SECONDARY ACTIONS — outs (forced + self), referee, cards, sub, review */}
+            <div className="grid shrink-0 grid-cols-4 gap-1.5 border-t border-border/50 pt-3 sm:grid-cols-10">
               <SmallActionBtn
                 icon={<LogOut className="h-3 w-3" />}
                 label="Raider out"
                 onClick={handleForcedOut}
-                disabled={!isLive || pending}
+                disabled={!isLive || pending || !raiderId}
                 tone="defend"
-                title="Raider stepped out of bounds — defence +1, raider OUT"
+                title={
+                  !raiderId
+                    ? 'Pick the raider first — forced out (pushed out by defenders), defence +1, raider OUT'
+                    : 'Raider out — forced out by defender pressure, defence +1, raider OUT'
+                }
+              />
+              <SmallActionBtn
+                icon={<LogOut className="h-3 w-3" />}
+                label="Self out"
+                onClick={handleRaiderSelfOut}
+                disabled={!isLive || pending || !raiderId}
+                tone="defend"
+                title={
+                  !raiderId
+                    ? 'Pick the raider first — self out (voluntary, no pressure), defence +1, raider OUT'
+                    : 'Self out — raider voluntarily exited, defence +1, raider OUT'
+                }
               />
               <SmallActionBtn
                 icon={<LogOut className="h-3 w-3" />}
@@ -1099,8 +1229,20 @@ export function ScoringConsole({
                 tone="attack"
                 title={
                   touchedDefenderIds.length === 0
-                    ? 'Pick the defender who stepped out, then tap'
-                    : `Defender(s) stepped out — attack +${touchedDefenderIds.length}`
+                    ? 'Pick the defender(s) — forced out (under raider pressure), attack +1 each'
+                    : `Defender(s) forced out — attack +${touchedDefenderIds.length}`
+                }
+              />
+              <SmallActionBtn
+                icon={<LogOut className="h-3 w-3" />}
+                label="Def. self"
+                onClick={handleDefenderSelfOut}
+                disabled={!isLive || pending || touchedDefenderIds.length === 0}
+                tone="attack"
+                title={
+                  touchedDefenderIds.length === 0
+                    ? 'Pick the defender(s) — self out (voluntary / tactical), attack +1 each'
+                    : `Defender(s) self-out — attack +${touchedDefenderIds.length}`
                 }
               />
               <SmallActionBtn
@@ -1151,6 +1293,18 @@ export function ScoringConsole({
                 tone="neutral"
                 title={`Reviews used: ${attackingId === home.id ? initial.homeReviewsUsed : initial.awayReviewsUsed}`}
               />
+            </div>
+
+            {/* Action reference — opens a help modal documenting every button */}
+            <div className="flex shrink-0 justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => setOpenModal({ kind: 'help' })}
+                className="inline-flex items-center gap-1 text-[10px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              >
+                <HelpCircle className="h-3 w-3" />
+                Action reference
+              </button>
             </div>
           </CardContent>
         </Card>
@@ -1248,6 +1402,260 @@ export function ScoringConsole({
           />
         </Modal>
       )}
+
+      {openModal?.kind === 'help' && (
+        <Modal
+          onClose={() => setOpenModal(null)}
+          title="Scoring action reference"
+          widthClass="max-w-3xl"
+        >
+          <ActionReference />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// ActionReference — comprehensive help content for every scoring
+// button. Grouped by row (Raid actions / Incidents & admin) so an
+// operator can quickly find the right rule mid-match.
+// ============================================================
+interface ActionDoc {
+  label: string;
+  scoring: string;
+  description: string;
+  /** Special note (precondition, gating rule, etc.) — italicised. */
+  note?: string;
+  /** Required selection: 'raider' / 'defender(s)' / 'none'. */
+  selection?: string;
+  tone: 'attack' | 'defend' | 'neutral';
+}
+
+const PRIMARY_ACTION_DOCS: ActionDoc[] = [
+  {
+    label: 'Touch',
+    scoring: 'Attack +N',
+    description:
+      'Raider touched N defender(s) and returned safely. Each touched defender goes OUT; revivals = number touched.',
+    selection: 'Raider + 1+ defenders touched (defaults to +1 if none picked)',
+    tone: 'attack',
+  },
+  {
+    label: 'Bonus',
+    scoring: 'Attack +1',
+    description:
+      'Raider crossed the bonus line and returned safely. No defender out.',
+    note: 'Requires ≥6 defenders on mat (rule blocks the call otherwise).',
+    selection: 'Raider',
+    tone: 'attack',
+  },
+  {
+    label: 'T+B',
+    scoring: 'Attack +(N+1)',
+    description:
+      'Touch + Bonus on the same raid: N touches scored AND bonus line crossed. Touched defenders OUT.',
+    selection: 'Raider + 1+ defenders touched',
+    tone: 'attack',
+  },
+  {
+    label: 'Super',
+    scoring: 'Attack +N (≥3)',
+    description:
+      'Super Raid: 3+ defenders touched in a single raid. Touched defenders OUT, raid flagged as super-raid in stats.',
+    note: 'Disabled until ≥3 defenders are picked. Use T+B for 2 touches + bonus instead.',
+    selection: 'Raider + ≥3 defenders touched',
+    tone: 'attack',
+  },
+  {
+    label: 'All out',
+    scoring: 'Attack +2',
+    description:
+      'Defending team has been wiped out. +2 awarded to attacking team; all defenders revived for the next raid.',
+    selection: 'None',
+    tone: 'attack',
+  },
+  {
+    label: 'Empty',
+    scoring: '0',
+    description:
+      'Empty raid — raider returned without touch or bonus. Increments do-or-die counter; the next raid for that team is do-or-die (raider must score or go OUT).',
+    selection: 'Raider',
+    tone: 'neutral',
+  },
+  {
+    label: 'B+T',
+    scoring: 'Attack +1 / Defence +1',
+    description:
+      'Bonus + Tackle: raider crossed the bonus line then was tackled before reaching mid-line. Raider OUT, defence revives 1.',
+    note: 'Requires ≥6 defenders on mat (same rule as Bonus).',
+    selection: 'Raider (defender chip optional, credits the tackle)',
+    tone: 'neutral',
+  },
+  {
+    label: 'Tackle',
+    scoring: 'Defence +1',
+    description:
+      'Defenders successfully tackled the raider. Raider OUT, defence revives 1.',
+    note: 'Auto-promotes to Super Tackle (+2) when ≤3 defenders are on mat at raid time.',
+    selection: 'Raider (defender chip optional, credits the tackle)',
+    tone: 'defend',
+  },
+  {
+    label: 'S.tackle',
+    scoring: 'Defence +2',
+    description:
+      'Super Tackle — successful tackle when the defending team is short-handed. Raider OUT, defence revives 1.',
+    note: 'Only counts when ≤3 defenders are on mat. Disabled otherwise.',
+    selection: 'Raider (defender chip optional, credits the tackle)',
+    tone: 'defend',
+  },
+];
+
+const SECONDARY_ACTION_DOCS: ActionDoc[] = [
+  {
+    label: 'Raider out',
+    scoring: 'Defence +1',
+    description:
+      'Raider was forced out — pushed across the lobby/boundary line under defender pressure. Raider OUT, defence revives 1.',
+    selection: 'Raider',
+    tone: 'defend',
+  },
+  {
+    label: 'Self out',
+    scoring: 'Defence +1',
+    description:
+      'Raider voluntarily exited the field without defender pressure (e.g., gave up the raid). Same scoring as Raider out; tagged separately for stats.',
+    selection: 'Raider',
+    tone: 'defend',
+  },
+  {
+    label: 'Defender out',
+    scoring: 'Attack +N',
+    description:
+      'One or more defenders were forced out under raider pressure (stepped out while attempting tackle). Each picked defender goes OUT; attack scores +1 per defender.',
+    selection: '1+ defenders',
+    tone: 'attack',
+  },
+  {
+    label: 'Def. self',
+    scoring: 'Attack +N',
+    description:
+      'Defender(s) voluntarily stepped off the mat (tactical / unforced). Same scoring as Defender out; tagged separately for stats.',
+    selection: '1+ defenders',
+    tone: 'attack',
+  },
+  {
+    label: 'Sub',
+    scoring: '—',
+    description:
+      'Substitute a benched player onto the mat in place of an on-mat player. Modal asks for player-in / player-out.',
+    selection: 'Picked inside the modal',
+    tone: 'neutral',
+  },
+  {
+    label: 'Green',
+    scoring: '—',
+    description:
+      'Green card — formal warning to the picked player. No score change, no out. Recorded in the event log.',
+    selection: 'Picked inside the modal',
+    tone: 'neutral',
+  },
+  {
+    label: 'Yellow',
+    scoring: '—',
+    description:
+      'Yellow card — picked player suspended for 2 minutes (auto-returns when the half-clock crosses the suspension end). They are off-mat during suspension.',
+    selection: 'Picked inside the modal',
+    tone: 'neutral',
+  },
+  {
+    label: 'Red',
+    scoring: '—',
+    description:
+      'Red card — picked player removed for the rest of the match. They cannot return; their roster slot stays vacant.',
+    selection: 'Picked inside the modal',
+    tone: 'neutral',
+  },
+  {
+    label: 'Tech +1',
+    scoring: 'Attack +1',
+    description:
+      'Technical point awarded by the referee to the currently-attacking team (e.g., opposing-team infraction not tied to a specific play).',
+    selection: 'None',
+    tone: 'neutral',
+  },
+  {
+    label: 'Review',
+    scoring: 'Conditional',
+    description:
+      'Trigger a review on the most recent event. If upheld, the last event is removed and player_state recomputes; if overturned, the call stands. Each team has a limited number of reviews per match.',
+    selection: 'Picked inside the modal',
+    tone: 'neutral',
+  },
+];
+
+function ActionReference() {
+  return (
+    <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-2 text-xs">
+      <p className="text-[11px] text-muted-foreground">
+        Quick reference for every button in the action area. Scoring shown is the standard
+        outcome — server-side rules may auto-promote (e.g., tackle → super tackle when
+        defenders are scarce) or block calls (e.g., bonus needs ≥6 defenders).
+      </p>
+
+      <ActionRefSection title="Raid actions (top row)" docs={PRIMARY_ACTION_DOCS} />
+      <ActionRefSection title="Incidents & admin (bottom row)" docs={SECONDARY_ACTION_DOCS} />
+    </div>
+  );
+}
+
+function ActionRefSection({ title, docs }: { title: string; docs: ActionDoc[] }) {
+  return (
+    <section>
+      <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {title}
+      </h4>
+      <div className="space-y-2">
+        {docs.map((d) => (
+          <ActionRefRow key={d.label} doc={d} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ActionRefRow({ doc }: { doc: ActionDoc }) {
+  const toneClass =
+    doc.tone === 'attack'
+      ? 'border-primary/40 bg-primary/5'
+      : doc.tone === 'defend'
+        ? 'border-sky-500/40 bg-sky-500/5'
+        : 'border-border bg-card';
+  const scoringClass =
+    doc.tone === 'attack'
+      ? 'text-primary'
+      : doc.tone === 'defend'
+        ? 'text-sky-500'
+        : 'text-muted-foreground';
+
+  return (
+    <div className={cn('rounded-md border p-3', toneClass)}>
+      <div className="mb-1 flex items-baseline justify-between gap-3">
+        <span className="font-mono text-sm font-semibold">{doc.label}</span>
+        <span className={cn('font-mono text-[11px] font-semibold', scoringClass)}>
+          {doc.scoring}
+        </span>
+      </div>
+      <p className="text-[11px] leading-relaxed text-foreground/90">{doc.description}</p>
+      {doc.selection && (
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          <span className="font-semibold">Required selection:</span> {doc.selection}
+        </p>
+      )}
+      {doc.note && (
+        <p className="mt-1 text-[10px] italic text-muted-foreground">⚠ {doc.note}</p>
+      )}
     </div>
   );
 }
@@ -1256,10 +1664,13 @@ function Modal({
   title,
   children,
   onClose,
+  widthClass = 'max-w-md',
 }: {
   title: string;
   children: React.ReactNode;
   onClose: () => void;
+  /** Tailwind max-width class for the modal card. Defaults to max-w-md. */
+  widthClass?: string;
 }) {
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1274,7 +1685,7 @@ function Modal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
-      <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+      <Card className={cn('w-full', widthClass)} onClick={(e) => e.stopPropagation()}>
         <CardContent className="space-y-3 p-5">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold">{title}</h3>
@@ -1461,6 +1872,7 @@ function ActionBtn({
   onClick,
   disabled,
   tone,
+  title,
 }: {
   icon?: React.ReactNode;
   label: string;
@@ -1468,6 +1880,7 @@ function ActionBtn({
   onClick: () => void;
   disabled?: boolean;
   tone: 'attack' | 'defend' | 'neutral';
+  title?: string;
 }) {
   const toneClass =
     tone === 'attack'
@@ -1481,6 +1894,7 @@ function ActionBtn({
       type="button"
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={cn(
         'flex flex-col items-center justify-center gap-1 rounded-lg border-2 p-3 text-center transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50',
         toneClass,
@@ -1588,8 +2002,11 @@ function PickerColumn({
         </div>
         <span className="text-[10px] text-muted-foreground">{helperText}</span>
       </div>
-      {/* 2-col grid so 7 chips fit in ~4 rows without an inner scroll. */}
-      <div className="grid grid-cols-2 gap-1 content-start">{children}</div>
+      {/* 2-col grid; on short viewports the column scrolls internally so chips
+          never spill over the action-buttons row below. */}
+      <div className="grid min-h-0 flex-1 grid-cols-2 content-start gap-1 overflow-y-auto pr-1">
+        {children}
+      </div>
     </div>
   );
 }

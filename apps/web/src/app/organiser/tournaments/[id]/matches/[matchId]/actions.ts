@@ -296,8 +296,10 @@ export async function recordTechPointAction(input: {
 }
 
 // ============================================================
-// Raider out of bounds (forced out — defence +1, raider out)
-// Modeled as a tackle_point with details flagged.
+// Raider out of bounds — covers both forced-out (raider pushed out
+// by defenders) and self-out (raider voluntarily exits without
+// pressure). Same scoring (defence +1, raider OUT); differentiated
+// in stats via details.reason. Modeled as a tackle_point.
 // ============================================================
 export async function recordRaiderOutOfBoundsAction(input: {
   matchId: string;
@@ -305,6 +307,7 @@ export async function recordRaiderOutOfBoundsAction(input: {
   raiderId: string | null;
   half: number;
   clockSeconds: number;
+  reason?: 'raider_out_of_bounds' | 'raider_self_out';
 }) {
   const user = await getSessionUser();
   if (!user?.tenantId) return { error: 'Not authorised' };
@@ -320,7 +323,7 @@ export async function recordRaiderOutOfBoundsAction(input: {
     half: input.half,
     clock_seconds: input.clockSeconds,
     raider_id: input.raiderId,
-    details: { reason: 'raider_out_of_bounds' },
+    details: { reason: input.reason ?? 'raider_out_of_bounds' },
     created_by: user.id,
   });
   if (error) return { error: error.message };
@@ -340,10 +343,11 @@ export async function recordRaiderOutOfBoundsAction(input: {
 }
 
 // ============================================================
-// Defender out of bounds — defender voluntarily left the field /
-// stepped over the line. Attacking team gets +1, that defender goes
-// out. Modeled as a raid_point with one defender in defender_ids
-// (so the existing trigger marks just that defender out).
+// Defender out of bounds — covers both forced-out (defender pushed
+// off the mat under raider pressure) and self-out (defender
+// voluntarily steps off — tactical or unforced). Attacking team
+// gets +1 per defender, those defenders go out. Modeled as a
+// raid_point so the existing trigger handles outs correctly.
 // ============================================================
 export async function recordDefenderOutOfBoundsAction(input: {
   matchId: string;
@@ -352,6 +356,7 @@ export async function recordDefenderOutOfBoundsAction(input: {
   defenderIds: string[]; // 1+ defenders that stepped out
   half: number;
   clockSeconds: number;
+  reason?: 'defender_out_of_bounds' | 'defender_self_out';
 }) {
   const user = await getSessionUser();
   if (!user?.tenantId) return { error: 'Not authorised' };
@@ -371,11 +376,91 @@ export async function recordDefenderOutOfBoundsAction(input: {
     clock_seconds: input.clockSeconds,
     raider_id: input.raiderId,
     defender_ids: input.defenderIds,
-    details: { reason: 'defender_out_of_bounds' },
+    details: { reason: input.reason ?? 'defender_out_of_bounds' },
     created_by: user.id,
   });
   if (error) return { error: error.message };
 
+  await supabase
+    .from('matches')
+    .update({
+      clock_seconds: input.clockSeconds,
+      current_half: input.half,
+      current_raider_id: null,
+      current_attacking_team_id: null,
+    })
+    .eq('id', input.matchId);
+
+  return { ok: true };
+}
+
+// ============================================================
+// Bonus + Tackle — raider crosses bonus line (attack +1) AND is then
+// tackled before reaching mid-line (defence +1, raider OUT, defender
+// revives). Modeled as one tackle_point event with both point sides
+// non-zero: score trigger sums both, player_state trigger handles the
+// out + revival. details.reason flagged so stats can split this from
+// a vanilla tackle.
+//
+// Bonus precondition (≥6 defenders on mat) is enforced here so the
+// rule matches the standalone Bonus button.
+// ============================================================
+const KABADDI_BONUS_MIN_DEFENDERS_FOR_COMBO = 6;
+
+export async function recordBonusPlusTackleAction(input: {
+  matchId: string;
+  attackingTeamId: string; // raiding team
+  raiderId: string; // required — the raider who got bonus + got tackled
+  defenderIds: string[]; // optional — defenders who made the tackle
+  half: number;
+  clockSeconds: number;
+}) {
+  const user = await getSessionUser();
+  if (!user?.tenantId) return { error: 'Not authorised' };
+  if (!input.raiderId) return { error: 'Pick the raider first.' };
+
+  const supabase = await createClient();
+
+  // Bonus precondition — same rule as the standalone Bonus button.
+  const { data: m } = await supabase
+    .from('matches')
+    .select('home_team_id, away_team_id, scoring_version')
+    .eq('id', input.matchId)
+    .maybeSingle();
+
+  if (m && m.scoring_version === 2) {
+    const defendingTeamId =
+      m.home_team_id === input.attackingTeamId ? m.away_team_id : m.home_team_id;
+    const { count: defendersOnMat } = await supabase
+      .from('match_player_state')
+      .select('id', { count: 'exact', head: true })
+      .eq('match_id', input.matchId)
+      .eq('team_id', defendingTeamId)
+      .eq('state', 'on_mat');
+    if (defendersOnMat !== null && defendersOnMat < KABADDI_BONUS_MIN_DEFENDERS_FOR_COMBO) {
+      return {
+        error: `Bonus + Tackle requires ≥${KABADDI_BONUS_MIN_DEFENDERS_FOR_COMBO} defenders on mat (only ${defendersOnMat} present).`,
+      };
+    }
+  }
+
+  const { error } = await supabase.from('match_events').insert({
+    tenant_id: user.tenantId,
+    match_id: input.matchId,
+    type: 'tackle_point',
+    attacking_team_id: input.attackingTeamId,
+    points_attacker: 1, // bonus
+    points_defender: 1, // tackle
+    half: input.half,
+    clock_seconds: input.clockSeconds,
+    raider_id: input.raiderId,
+    defender_ids: input.defenderIds.length > 0 ? input.defenderIds : null,
+    details: { reason: 'bonus_plus_tackle' },
+    created_by: user.id,
+  });
+  if (error) return { error: error.message };
+
+  // Raid resolved — clear in-progress raider.
   await supabase
     .from('matches')
     .update({
