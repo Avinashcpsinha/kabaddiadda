@@ -9,6 +9,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn, initials } from '@/lib/utils';
 import { setMatchLineupsAndStartAction } from './actions';
+import {
+  readRequireConfirm,
+  writeRequireConfirm,
+} from '@/lib/scoring-prefs';
 
 export interface RosterPlayer {
   id: string;
@@ -93,6 +97,17 @@ export function LineupBuilder({
     buildInitialSelection(awayRoster, initialAway),
   );
   const [pending, startTransition] = React.useTransition();
+  // Per-browser preference: when enabled, scoring actions stage and need an
+  // explicit Confirm click before recording. Default true; persisted in
+  // localStorage so the operator's choice carries across matches.
+  const [requireConfirm, setRequireConfirm] = React.useState(true);
+  React.useEffect(() => {
+    setRequireConfirm(readRequireConfirm());
+  }, []);
+  function toggleRequireConfirm(next: boolean) {
+    setRequireConfirm(next);
+    writeRequireConfirm(next);
+  }
 
   const homeCounts = counts(homeSel);
   const awayCounts = counts(awaySel);
@@ -266,33 +281,50 @@ export function LineupBuilder({
 
       {!locked && (
         <Card>
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-            <div className="text-sm text-muted-foreground">
-              {homeReady && awayReady ? (
-                <span className="text-emerald-500">Both teams ready. Locking the lineup will start the match.</span>
-              ) : (
-                <span>
-                  Pick {KABADDI.PLAYERS_PER_SIDE} starters per team to enable the start button.
+          <CardContent className="flex flex-col gap-3 p-4">
+            <label className="flex cursor-pointer items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 cursor-pointer rounded border-border accent-primary"
+                checked={requireConfirm}
+                onChange={(e) => toggleRequireConfirm(e.target.checked)}
+              />
+              <span>
+                <span className="font-medium">Confirm before recording each scoring action</span>
+                <span className="ml-2 text-xs text-muted-foreground">
+                  When on, tapping a scoring button stages the action — a separate{' '}
+                  <span className="font-semibold">Confirm</span> click records it. Helps avoid mis-taps.
                 </span>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={() => handleSubmit(false)}
-                disabled={pending}
-              >
-                Save draft
-              </Button>
-              <Button
-                variant="flame"
-                size="lg"
-                onClick={() => handleSubmit(true)}
-                disabled={!canStart}
-              >
-                <Play className="h-4 w-4" />
-                Lock & start match
-              </Button>
+              </span>
+            </label>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-sm text-muted-foreground">
+                {homeReady && awayReady ? (
+                  <span className="text-emerald-500">Both teams ready. Locking the lineup will start the match.</span>
+                ) : (
+                  <span>
+                    Pick {KABADDI.PLAYERS_PER_SIDE} starters per team to enable the start button.
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => handleSubmit(false)}
+                  disabled={pending}
+                >
+                  Save draft
+                </Button>
+                <Button
+                  variant="flame"
+                  size="lg"
+                  onClick={() => handleSubmit(true)}
+                  disabled={!canStart}
+                >
+                  <Play className="h-4 w-4" />
+                  Lock & start match
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

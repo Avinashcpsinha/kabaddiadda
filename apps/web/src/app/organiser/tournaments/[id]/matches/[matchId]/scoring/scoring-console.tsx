@@ -38,6 +38,10 @@ import {
 } from '@/lib/audio';
 import { cn, initials } from '@/lib/utils';
 import {
+  readRequireConfirm,
+  writeRequireConfirm,
+} from '@/lib/scoring-prefs';
+import {
   adjustScoreAction,
   callReviewAction,
   deleteMatchEventAction,
@@ -221,6 +225,58 @@ export function ScoringConsole({
     | { kind: 'review'; teamId: string }
     | { kind: 'help' }
   >(null);
+
+  // Confirm-before-recording flow. When `requireConfirm` is true (default),
+  // tapping a scoring button stages the action into `pendingAction` instead of
+  // executing immediately — a separate Confirm click records it. Persisted in
+  // localStorage so the operator's choice carries across matches/sessions.
+  const [requireConfirm, setRequireConfirm] = React.useState(true);
+  React.useEffect(() => {
+    setRequireConfirm(readRequireConfirm());
+  }, []);
+  function toggleRequireConfirm() {
+    setRequireConfirm((prev) => {
+      const next = !prev;
+      writeRequireConfirm(next);
+      return next;
+    });
+  }
+  const [pendingAction, setPendingAction] = React.useState<
+    | {
+        label: string;
+        sub: string;
+        tone: 'attack' | 'defend' | 'neutral';
+        run: () => void;
+      }
+    | null
+  >(null);
+  // Re-stage on selection change — the staged closure captured the touch count
+  // / raider at click time, so changing selections after staging would record
+  // stale values. Clearing the pending action forces the operator to re-stage.
+  React.useEffect(() => {
+    setPendingAction(null);
+  }, [raiderId, touchedDefenderIds, attackingId]);
+  function stageOrRun(
+    label: string,
+    sub: string,
+    tone: 'attack' | 'defend' | 'neutral',
+    run: () => void,
+  ) {
+    if (!requireConfirm) {
+      run();
+      return;
+    }
+    setPendingAction({ label, sub, tone, run });
+  }
+  function confirmPending() {
+    const p = pendingAction;
+    if (!p) return;
+    setPendingAction(null);
+    p.run();
+  }
+  function cancelPending() {
+    setPendingAction(null);
+  }
 
   const isLive = status === 'live';
   const remaining = Math.max(0, HALF_SECONDS - clock);
@@ -1081,79 +1137,161 @@ export function ScoringConsole({
               </div>
             </div>
 
+            {/* Pending action bar — visible when an action has been staged but
+                not yet confirmed. Hidden when 'Confirm before scoring' is off
+                or no action is staged. */}
+            {pendingAction && (
+              <div className="flex shrink-0 items-center gap-2 rounded-md border-2 border-amber-500 bg-amber-500/10 px-3 py-2 text-xs">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                <span className="text-muted-foreground">About to record:</span>
+                <span className="font-semibold text-foreground">
+                  {pendingAction.label} {pendingAction.sub}
+                </span>
+                <div className="ml-auto flex gap-1">
+                  <Button
+                    size="sm"
+                    variant="flame"
+                    onClick={confirmPending}
+                    disabled={pending}
+                  >
+                    Confirm
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={cancelPending}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Action buttons row — single horizontal grid */}
             <div className="grid shrink-0 grid-cols-4 gap-1.5 border-t border-border/50 pt-3 sm:grid-cols-9">
               <ActionBtn
                 icon={<Target />}
                 label="Touch"
                 sub={`+${Math.max(touchedCount, 1)}`}
-                onClick={() =>
-                  record('raid_point', Math.max(touchedCount, 1), 0, {
-                    includeRaider: true,
-                    includeDefenders: true,
-                  })
-                }
-                disabled={!isLive || pending}
+                onClick={() => {
+                  const points = touchedCount;
+                  stageOrRun('Touch', `+${points}`, 'attack', () =>
+                    record('raid_point', points, 0, {
+                      includeRaider: true,
+                      includeDefenders: true,
+                    }),
+                  );
+                }}
+                disabled={!isLive || pending || !raiderId || touchedCount === 0}
                 tone="attack"
+                title={
+                  !raiderId
+                    ? 'Pick the raider first'
+                    : touchedCount === 0
+                      ? 'Tap the defender(s) the raider touched'
+                      : `Touch — raider returned safely after touching ${touchedCount} defender(s). Attack +${touchedCount}.`
+                }
+                staged={pendingAction?.label === 'Touch'}
               />
               <ActionBtn
                 icon={<Sparkles />}
                 label="Bonus"
                 sub="+1"
-                onClick={() => record('bonus_point', 1, 0, { includeRaider: true })}
-                disabled={!isLive || pending}
+                onClick={() =>
+                  stageOrRun('Bonus', '+1', 'attack', () =>
+                    record('bonus_point', 1, 0, { includeRaider: true }),
+                  )
+                }
+                disabled={!isLive || pending || !raiderId}
                 tone="attack"
+                title={
+                  !raiderId
+                    ? 'Pick the raider first — Bonus is awarded when the raider crosses the bonus line and returns'
+                    : 'Bonus — raider crossed the bonus line and returned safely. Attack +1.'
+                }
+                staged={pendingAction?.label === 'Bonus'}
               />
               <ActionBtn
                 icon={<Flame />}
                 label="T+B"
                 sub={`+${Math.max(touchedCount, 1) + 1}`}
-                onClick={() =>
-                  record('raid_point', Math.max(touchedCount, 1) + 1, 0, {
-                    includeRaider: true,
-                    includeDefenders: true,
-                  })
-                }
-                disabled={!isLive || pending}
+                onClick={() => {
+                  const points = touchedCount + 1;
+                  stageOrRun('T+B', `+${points}`, 'attack', () =>
+                    record('raid_point', points, 0, {
+                      includeRaider: true,
+                      includeDefenders: true,
+                    }),
+                  );
+                }}
+                disabled={!isLive || pending || !raiderId || touchedCount === 0}
                 tone="attack"
+                title={
+                  !raiderId
+                    ? 'Pick the raider first'
+                    : touchedCount === 0
+                      ? 'Tap the defender(s) touched — T+B = touch(es) + bonus on the same raid'
+                      : `Touch + Bonus — ${touchedCount} touch(es) and bonus line crossed. Attack +${touchedCount + 1}.`
+                }
+                staged={pendingAction?.label === 'T+B'}
               />
               <ActionBtn
                 icon={<Sparkles />}
                 label="Super"
                 sub={`+${Math.max(touchedCount, 3)}`}
-                onClick={() =>
-                  record('super_raid', Math.max(touchedCount, 3), 0, {
-                    includeRaider: true,
-                    includeDefenders: true,
-                  })
-                }
-                disabled={!isLive || pending || !superRaidEligible}
+                onClick={() => {
+                  const points = touchedCount;
+                  stageOrRun('Super', `+${points}`, 'attack', () =>
+                    record('super_raid', points, 0, {
+                      includeRaider: true,
+                      includeDefenders: true,
+                    }),
+                  );
+                }}
+                disabled={!isLive || pending || !raiderId || !superRaidEligible}
                 tone="attack"
                 title={
-                  !superRaidEligible
-                    ? 'Super Raid needs ≥3 defenders touched (or use T+B for 2 touches + bonus)'
-                    : undefined
+                  !raiderId
+                    ? 'Pick the raider first'
+                    : !superRaidEligible
+                      ? 'Super Raid needs ≥3 defenders touched (or use T+B for 2 touches + bonus)'
+                      : `Super Raid — ${touchedCount} defenders touched in one raid. Attack +${touchedCount}.`
                 }
+                staged={pendingAction?.label === 'Super'}
               />
               <ActionBtn
                 label="All out"
                 sub="+2"
-                onClick={() => record('all_out', 2, 0, { includeRaider: false })}
+                onClick={() =>
+                  stageOrRun('All out', '+2', 'attack', () =>
+                    record('all_out', 2, 0, { includeRaider: false }),
+                  )
+                }
                 disabled={!isLive || pending}
                 tone="attack"
+                title="All out — defending team has been wiped out. Attack +2; defenders all revive."
+                staged={pendingAction?.label === 'All out'}
               />
               <ActionBtn
                 label="Empty"
                 sub="0"
-                onClick={() => record('empty_raid', 0, 0, { includeRaider: true })}
-                disabled={!isLive || pending}
+                onClick={() =>
+                  stageOrRun('Empty', '0', 'neutral', () =>
+                    record('empty_raid', 0, 0, { includeRaider: true }),
+                  )
+                }
+                disabled={!isLive || pending || !raiderId}
                 tone="neutral"
+                title={
+                  !raiderId
+                    ? 'Pick the raider first — Empty raid: raider returned without a touch or bonus'
+                    : 'Empty raid — raider returned without scoring. Increments do-or-die counter.'
+                }
+                staged={pendingAction?.label === 'Empty'}
               />
               <ActionBtn
                 icon={<Flame />}
                 label="B+T"
                 sub="1|1"
-                onClick={handleBonusPlusTackle}
+                onClick={() =>
+                  stageOrRun('B+T', '1|1', 'neutral', handleBonusPlusTackle)
+                }
                 disabled={!isLive || pending || !raiderId}
                 tone="neutral"
                 title={
@@ -1161,37 +1299,61 @@ export function ScoringConsole({
                     ? 'Pick the raider first — Bonus + Tackle: raider got bonus then was tackled, attack +1, defence +1, raider OUT (defender chip optional, credits the tackle)'
                     : 'Bonus + Tackle — raider got bonus then was tackled before mid-line. Attack +1, defence +1, raider OUT.'
                 }
+                staged={pendingAction?.label === 'B+T'}
               />
               <ActionBtn
                 icon={<Shield />}
                 label="Tackle"
                 sub="+1"
                 onClick={() =>
-                  record('tackle_point', 0, 1, {
-                    includeRaider: true,
-                    includeDefenders: true,
-                  })
+                  stageOrRun('Tackle', '+1', 'defend', () =>
+                    record('tackle_point', 0, 1, {
+                      includeRaider: true,
+                      includeDefenders: true,
+                    }),
+                  )
                 }
-                disabled={!isLive || pending}
+                disabled={!isLive || pending || !raiderId || touchedCount === 0}
                 tone="defend"
+                title={
+                  !raiderId
+                    ? 'Pick the raider first'
+                    : touchedCount === 0
+                      ? 'Tap the defender(s) who tackled the raider'
+                      : 'Tackle — defenders tackled the raider. Defence +1, raider OUT.'
+                }
+                staged={pendingAction?.label === 'Tackle'}
               />
               <ActionBtn
                 icon={<Shield />}
                 label="S.tackle"
                 sub="+2"
                 onClick={() =>
-                  record('super_tackle', 0, 2, {
-                    includeRaider: true,
-                    includeDefenders: true,
-                  })
+                  stageOrRun('S.tackle', '+2', 'defend', () =>
+                    record('super_tackle', 0, 2, {
+                      includeRaider: true,
+                      includeDefenders: true,
+                    }),
+                  )
                 }
-                disabled={!isLive || pending || !superTackleEligible}
+                disabled={
+                  !isLive ||
+                  pending ||
+                  !raiderId ||
+                  touchedCount === 0 ||
+                  !superTackleEligible
+                }
                 tone="defend"
                 title={
-                  !superTackleEligible
-                    ? `Super Tackle only counts when ≤${KABADDI.SUPER_TACKLE_DEFENDER_THRESHOLD} defenders are on mat (currently ${defendersOnMatCount})`
-                    : undefined
+                  !raiderId
+                    ? 'Pick the raider first'
+                    : touchedCount === 0
+                      ? 'Tap the defender(s) who made the super tackle'
+                      : !superTackleEligible
+                        ? `Super Tackle only counts when ≤${KABADDI.SUPER_TACKLE_DEFENDER_THRESHOLD} defenders are on mat (currently ${defendersOnMatCount})`
+                        : 'Super Tackle — tackle made with ≤3 defenders on mat. Defence +2, raider OUT.'
                 }
+                staged={pendingAction?.label === 'S.tackle'}
               />
             </div>
 
@@ -1200,7 +1362,9 @@ export function ScoringConsole({
               <SmallActionBtn
                 icon={<LogOut className="h-3 w-3" />}
                 label="Raider out"
-                onClick={handleForcedOut}
+                onClick={() =>
+                  stageOrRun('Raider out', 'def +1', 'defend', handleForcedOut)
+                }
                 disabled={!isLive || pending || !raiderId}
                 tone="defend"
                 title={
@@ -1208,11 +1372,14 @@ export function ScoringConsole({
                     ? 'Pick the raider first — forced out (pushed out by defenders), defence +1, raider OUT'
                     : 'Raider out — forced out by defender pressure, defence +1, raider OUT'
                 }
+                staged={pendingAction?.label === 'Raider out'}
               />
               <SmallActionBtn
                 icon={<LogOut className="h-3 w-3" />}
                 label="Self out"
-                onClick={handleRaiderSelfOut}
+                onClick={() =>
+                  stageOrRun('Self out', 'def +1', 'defend', handleRaiderSelfOut)
+                }
                 disabled={!isLive || pending || !raiderId}
                 tone="defend"
                 title={
@@ -1220,11 +1387,19 @@ export function ScoringConsole({
                     ? 'Pick the raider first — self out (voluntary, no pressure), defence +1, raider OUT'
                     : 'Self out — raider voluntarily exited, defence +1, raider OUT'
                 }
+                staged={pendingAction?.label === 'Self out'}
               />
               <SmallActionBtn
                 icon={<LogOut className="h-3 w-3" />}
                 label="Defender out"
-                onClick={handleDefenderOut}
+                onClick={() =>
+                  stageOrRun(
+                    'Defender out',
+                    `att +${touchedDefenderIds.length}`,
+                    'attack',
+                    handleDefenderOut,
+                  )
+                }
                 disabled={!isLive || pending || touchedDefenderIds.length === 0}
                 tone="attack"
                 title={
@@ -1232,11 +1407,19 @@ export function ScoringConsole({
                     ? 'Pick the defender(s) — forced out (under raider pressure), attack +1 each'
                     : `Defender(s) forced out — attack +${touchedDefenderIds.length}`
                 }
+                staged={pendingAction?.label === 'Defender out'}
               />
               <SmallActionBtn
                 icon={<LogOut className="h-3 w-3" />}
                 label="Def. self"
-                onClick={handleDefenderSelfOut}
+                onClick={() =>
+                  stageOrRun(
+                    'Def. self',
+                    `att +${touchedDefenderIds.length}`,
+                    'attack',
+                    handleDefenderSelfOut,
+                  )
+                }
                 disabled={!isLive || pending || touchedDefenderIds.length === 0}
                 tone="attack"
                 title={
@@ -1244,6 +1427,7 @@ export function ScoringConsole({
                     ? 'Pick the defender(s) — self out (voluntary / tactical), attack +1 each'
                     : `Defender(s) self-out — attack +${touchedDefenderIds.length}`
                 }
+                staged={pendingAction?.label === 'Def. self'}
               />
               <SmallActionBtn
                 icon={<ArrowRightLeft className="h-3 w-3" />}
@@ -1296,7 +1480,25 @@ export function ScoringConsole({
             </div>
 
             {/* Action reference — opens a help modal documenting every button */}
-            <div className="flex shrink-0 justify-end pt-1">
+            <div className="flex shrink-0 items-center justify-end gap-3 pt-1">
+              <button
+                type="button"
+                onClick={toggleRequireConfirm}
+                className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
+                title="When on, scoring buttons stage an action — a separate Confirm click records it."
+              >
+                <span
+                  className={cn(
+                    'inline-flex h-3.5 w-6 items-center rounded-full border px-0.5 transition-colors',
+                    requireConfirm
+                      ? 'border-primary/60 bg-primary/30 justify-end'
+                      : 'border-border bg-muted justify-start',
+                  )}
+                >
+                  <span className="h-2.5 w-2.5 rounded-full bg-foreground/80" />
+                </span>
+                Confirm before scoring · {requireConfirm ? 'ON' : 'OFF'}
+              </button>
               <button
                 type="button"
                 onClick={() => setOpenModal({ kind: 'help' })}
@@ -1438,7 +1640,7 @@ const PRIMARY_ACTION_DOCS: ActionDoc[] = [
     scoring: 'Attack +N',
     description:
       'Raider touched N defender(s) and returned safely. Each touched defender goes OUT; revivals = number touched.',
-    selection: 'Raider + 1+ defenders touched (defaults to +1 if none picked)',
+    selection: 'Raider + 1+ defenders touched',
     tone: 'attack',
   },
   {
@@ -1498,7 +1700,7 @@ const PRIMARY_ACTION_DOCS: ActionDoc[] = [
     description:
       'Defenders successfully tackled the raider. Raider OUT, defence revives 1.',
     note: 'Auto-promotes to Super Tackle (+2) when ≤3 defenders are on mat at raid time.',
-    selection: 'Raider (defender chip optional, credits the tackle)',
+    selection: 'Raider + 1+ defenders (the tackler(s))',
     tone: 'defend',
   },
   {
@@ -1507,7 +1709,7 @@ const PRIMARY_ACTION_DOCS: ActionDoc[] = [
     description:
       'Super Tackle — successful tackle when the defending team is short-handed. Raider OUT, defence revives 1.',
     note: 'Only counts when ≤3 defenders are on mat. Disabled otherwise.',
-    selection: 'Raider (defender chip optional, credits the tackle)',
+    selection: 'Raider + 1+ defenders (the tackler(s))',
     tone: 'defend',
   },
 ];
@@ -1873,6 +2075,7 @@ function ActionBtn({
   disabled,
   tone,
   title,
+  staged,
 }: {
   icon?: React.ReactNode;
   label: string;
@@ -1881,6 +2084,7 @@ function ActionBtn({
   disabled?: boolean;
   tone: 'attack' | 'defend' | 'neutral';
   title?: string;
+  staged?: boolean;
 }) {
   const toneClass =
     tone === 'attack'
@@ -1898,6 +2102,7 @@ function ActionBtn({
       className={cn(
         'flex flex-col items-center justify-center gap-1 rounded-lg border-2 p-3 text-center transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50',
         toneClass,
+        staged && 'animate-pulse border-amber-500 bg-amber-500/15 ring-2 ring-amber-500',
       )}
     >
       {icon && <span className="[&>svg]:h-4 [&>svg]:w-4">{icon}</span>}
@@ -1947,6 +2152,7 @@ function SmallActionBtn({
   disabled,
   tone,
   title,
+  staged,
 }: {
   icon?: React.ReactNode;
   label: string;
@@ -1954,6 +2160,7 @@ function SmallActionBtn({
   disabled?: boolean;
   tone: 'attack' | 'defend' | 'neutral';
   title?: string;
+  staged?: boolean;
 }) {
   const toneClass =
     tone === 'attack'
@@ -1970,6 +2177,7 @@ function SmallActionBtn({
       className={cn(
         'flex flex-col items-center justify-center gap-0.5 rounded-md border px-2 py-1.5 text-[10px] font-medium transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-40',
         toneClass,
+        staged && 'animate-pulse border-amber-500 bg-amber-500/15 ring-2 ring-amber-500',
       )}
     >
       {icon}
