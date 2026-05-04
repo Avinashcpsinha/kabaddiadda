@@ -26,10 +26,14 @@ export async function generateMetadata({
  */
 export default async function OverlayPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ matchId: string }>;
+  searchParams: Promise<{ preview?: string }>;
 }) {
   const { matchId } = await params;
+  const { preview } = await searchParams;
+  const previewMode = preview === '1' || preview === 'true';
   const supabase = await createClient();
 
   const { data: match } = await supabase
@@ -145,6 +149,7 @@ export default async function OverlayPage({
   return (
     <OverlayStrip
       matchId={matchId}
+      previewMode={previewMode}
       initial={{
         status: match.status,
         homeScore: match.home_score,

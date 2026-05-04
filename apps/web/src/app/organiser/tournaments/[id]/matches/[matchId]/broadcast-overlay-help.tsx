@@ -21,6 +21,7 @@ export function BroadcastOverlayHelp({ matchId }: { matchId: string }) {
   }, []);
 
   const url = origin ? `${origin}/overlay/match/${matchId}` : '';
+  const previewUrl = url ? `${url}?preview=1` : '';
   const shareText = `Live scoreboard overlay for the match.
 
 URL: ${url}
@@ -82,6 +83,21 @@ What it shows
           <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-foreground/90">
             {shareText}
           </pre>
+          {previewUrl && (
+            <div className="mt-3 flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px]">
+              <span className="text-muted-foreground">
+                Want to see how it looks over a video first?
+              </span>
+              <a
+                href={previewUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold text-amber-500 underline-offset-2 hover:underline"
+              >
+                Open preview mode →
+              </a>
+            </div>
+          )}
         </div>
       )}
     </div>

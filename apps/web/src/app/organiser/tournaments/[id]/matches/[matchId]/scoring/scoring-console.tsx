@@ -1537,12 +1537,19 @@ export function ScoringConsole({
                     handleDefenderOut,
                   )
                 }
-                disabled={!isLive || pending || touchedDefenderIds.length === 0}
+                disabled={
+                  !isLive ||
+                  pending ||
+                  !raiderId ||
+                  touchedDefenderIds.length === 0
+                }
                 tone="attack"
                 title={
-                  touchedDefenderIds.length === 0
-                    ? 'Pick the defender(s) — forced out (under raider pressure), attack +1 each'
-                    : `Defender(s) forced out — attack +${touchedDefenderIds.length}`
+                  !raiderId
+                    ? 'Pick the raider first — defender forced out happens under raider pressure'
+                    : touchedDefenderIds.length === 0
+                      ? 'Tap the defender(s) the raider pushed off the mat — attack +1 each'
+                      : `Defender(s) forced out — attack +${touchedDefenderIds.length}`
                 }
                 staged={pendingAction?.label === 'Defender out'}
               />

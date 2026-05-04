@@ -134,9 +134,15 @@ function describeLastEvent(e: LastEvent): string {
 export function OverlayStrip({
   matchId,
   initial,
+  previewMode = false,
 }: {
   matchId: string;
   initial: InitialState;
+  /** When true, renders a faux broadcast backdrop + watermark behind the
+   *  strip so the operator can preview contrast / positioning without
+   *  installing OBS. The backdrop never renders for the live `?preview=0`
+   *  default that broadcasters use. */
+  previewMode?: boolean;
 }) {
   const home = initial.home;
   const away = initial.away;
@@ -337,7 +343,9 @@ export function OverlayStrip({
   const awayLabelTone = awayAttacking && currentRaider ? 'raider' : 'event';
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 flex justify-center px-4 pb-4">
+    <>
+      {previewMode && <PreviewBackdrop />}
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 flex justify-center px-4 pb-4">
       <div className="relative flex h-[170px] w-full max-w-[1920px] items-stretch overflow-hidden rounded-2xl bg-zinc-950/92 text-white shadow-[0_20px_60px_rgba(0,0,0,0.5)] backdrop-blur-xl ring-1 ring-white/10">
         {/* Top accent bar — gradient + DoD/all-out pulse */}
         <div
@@ -411,7 +419,8 @@ export function OverlayStrip({
           />
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -627,6 +636,48 @@ function ContextBadge({
       )}
     >
       {label}
+    </div>
+  );
+}
+
+/**
+ * Preview-only backdrop. Activated by ?preview=1 on the overlay URL — gives
+ * the operator a faux broadcast canvas (dim arena gradient + watermark) so
+ * they can see how the strip will composite over a video without installing
+ * OBS. Real broadcasters never get this since they paste the URL without the
+ * query param.
+ */
+function PreviewBackdrop() {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none fixed inset-0 -z-10 overflow-hidden"
+    >
+      {/* Dim arena gradient — radial spotlights that loosely mimic stadium lighting */}
+      <div className="absolute inset-0 bg-zinc-900" />
+      <div
+        className="absolute inset-0 opacity-80"
+        style={{
+          background:
+            'radial-gradient(ellipse at 30% 40%, rgba(234,88,12,0.18) 0%, transparent 50%),' +
+            'radial-gradient(ellipse at 70% 60%, rgba(14,165,233,0.18) 0%, transparent 50%),' +
+            'radial-gradient(ellipse at 50% 100%, rgba(245,158,11,0.12) 0%, transparent 60%)',
+        }}
+      />
+      {/* Faux mat pattern — concentric rectangles like a kabaddi mat from above */}
+      <div className="absolute left-1/2 top-1/2 h-[60%] w-[80%] -translate-x-1/2 -translate-y-[55%] rounded-md ring-1 ring-white/10 bg-gradient-to-b from-amber-900/20 via-zinc-900/0 to-zinc-900/0" />
+      <div className="absolute left-1/2 top-1/2 h-[44%] w-[60%] -translate-x-1/2 -translate-y-[55%] rounded-md ring-1 ring-white/5" />
+
+      {/* Preview watermark — corner pill so the operator never confuses
+          this with what the broadcaster actually sees */}
+      <div className="absolute left-4 top-4 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.32em] text-amber-300 backdrop-blur">
+        Preview · ?preview=1 only
+      </div>
+      <div className="absolute right-4 top-4 max-w-[280px] rounded-md border border-white/10 bg-zinc-950/60 px-3 py-1.5 text-[10px] leading-relaxed text-zinc-300 backdrop-blur">
+        This dim canvas is a stand-in for your YouTube video — share the
+        same URL <span className="text-zinc-500">without</span>{' '}
+        <code className="text-amber-300">?preview=1</code> with your broadcaster.
+      </div>
     </div>
   );
 }
