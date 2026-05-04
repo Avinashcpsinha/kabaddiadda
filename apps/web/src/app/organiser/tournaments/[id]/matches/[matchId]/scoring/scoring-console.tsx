@@ -1265,8 +1265,7 @@ export function ScoringConsole({
                 label="Touch"
                 sub={`+${Math.max(touchedCount, 1)}`}
                 onClick={() => {
-                  // Default +1 (auto-strike #1 defender) when none selected.
-                  const points = Math.max(touchedCount, 1);
+                  const points = touchedCount;
                   stageOrRun('Touch', `+${points}`, 'attack', () =>
                     record('raid_point', points, 0, {
                       includeRaider: true,
@@ -1274,13 +1273,13 @@ export function ScoringConsole({
                     }),
                   );
                 }}
-                disabled={!isLive || pending || !raiderId}
+                disabled={!isLive || pending || !raiderId || touchedCount === 0}
                 tone="attack"
                 title={
                   !raiderId
                     ? 'Pick the raider first'
                     : touchedCount === 0
-                      ? 'Touch — no defender picked, the lowest-jersey defender on mat will be marked OUT (Attack +1).'
+                      ? 'Tap the defender(s) the raider touched'
                       : `Touch — raider returned safely after touching ${touchedCount} defender(s). Attack +${touchedCount}.`
                 }
                 staged={pendingAction?.label === 'Touch'}
@@ -1779,8 +1778,7 @@ const PRIMARY_ACTION_DOCS: ActionDoc[] = [
     scoring: 'Attack +N',
     description:
       'Raider touched N defender(s) and returned safely. Each touched defender goes OUT; revivals = number touched.',
-    note: 'If no defender chip is selected, the lowest-jersey defender on mat is auto-marked OUT (Attack +1).',
-    selection: 'Raider (defenders optional — auto-strikes #1 if none picked)',
+    selection: 'Raider + 1+ defenders touched',
     tone: 'attack',
   },
   {
