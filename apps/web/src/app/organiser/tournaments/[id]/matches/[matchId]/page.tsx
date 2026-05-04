@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getSessionUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { initials } from '@/lib/utils';
+import { BroadcastOverlayHelp } from './broadcast-overlay-help';
 
 const EVENT_LABEL: Record<string, string> = {
   raid_point: 'Raid',
@@ -123,7 +124,15 @@ export default async function MatchDetailPage({
                 Public live page
               </Link>
             </Button>
+            <Button asChild variant="outline">
+              <Link href={`/overlay/match/${matchId}`} target="_blank">
+                <ExternalLink className="h-4 w-4" />
+                Broadcast overlay
+              </Link>
+            </Button>
           </div>
+
+          <BroadcastOverlayHelp matchId={matchId} />
         </CardContent>
       </Card>
 
