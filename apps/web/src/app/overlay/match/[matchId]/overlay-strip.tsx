@@ -308,25 +308,33 @@ export function OverlayStrip({
     (homeAttacking && homeDod >= 2) || (awayAttacking && awayDod >= 2);
   const isLive = status === 'live';
 
-  // Per-side bottom label: raider on the attacking side, last-event on
-  // the side that just scored. Falls back to nothing when neither applies.
+  // Per-side bottom label.
+  //   • While a raid is in progress: the attacking team shows the current
+  //     raider, the *other* team shows the last event commentary.
+  //   • Between raids: the team that scored on the last event shows the
+  //     commentary (the other side stays empty).
   const lastEventText = lastEvent ? describeLastEvent(lastEvent) : null;
-  const homeLabel =
-    homeAttacking && currentRaider
-      ? `▶ ${shortPlayer(currentRaider)}`
-      : lastEvent && lastEvent.attackingTeamId === home.id && lastEventText
-        ? lastEventText
-        : null;
-  const awayLabel =
-    awayAttacking && currentRaider
-      ? `▶ ${shortPlayer(currentRaider)}`
-      : lastEvent && lastEvent.attackingTeamId === away.id && lastEventText
-        ? lastEventText
-        : null;
-  const homeLabelTone =
-    homeAttacking && currentRaider ? 'raider' : 'event';
-  const awayLabelTone =
-    awayAttacking && currentRaider ? 'raider' : 'event';
+  const raidActive = !!currentRaider && (homeAttacking || awayAttacking);
+
+  function sideLabel(thisSideAttacking: boolean, thisSideId: string): string | null {
+    if (thisSideAttacking && currentRaider) {
+      return `▶ ${shortPlayer(currentRaider)}`;
+    }
+    if (raidActive) {
+      // Defending side during a live raid — always show the last action.
+      return lastEventText;
+    }
+    // Between raids — only show on the team that scored.
+    if (lastEvent && lastEventText && lastEvent.attackingTeamId === thisSideId) {
+      return lastEventText;
+    }
+    return null;
+  }
+
+  const homeLabel = sideLabel(homeAttacking, home.id);
+  const awayLabel = sideLabel(awayAttacking, away.id);
+  const homeLabelTone = homeAttacking && currentRaider ? 'raider' : 'event';
+  const awayLabelTone = awayAttacking && currentRaider ? 'raider' : 'event';
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 flex justify-center px-4 pb-4">
@@ -466,15 +474,26 @@ function TeamSide({
     </div>
   );
 
+  // Pin each side to its outer edge: home group hugs the strip's left,
+  // away group hugs the right. Centre column sits between them.
   return (
     <div
       className={cn(
-        'flex flex-1 items-center gap-4',
-        align === 'left' ? 'justify-end pl-6 pr-4' : 'flex-row-reverse pl-4 pr-6',
+        'flex min-w-0 flex-1 items-center gap-5',
+        align === 'left' ? 'justify-start pl-6 pr-4' : 'justify-end pl-4 pr-6',
       )}
     >
-      {logo}
-      {content}
+      {align === 'left' ? (
+        <>
+          {logo}
+          {content}
+        </>
+      ) : (
+        <>
+          {content}
+          {logo}
+        </>
+      )}
     </div>
   );
 }
