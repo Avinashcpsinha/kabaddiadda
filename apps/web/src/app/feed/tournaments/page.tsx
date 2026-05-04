@@ -56,8 +56,7 @@ export default async function BrowseTournamentsPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {tournaments.map((t) => {
-            // @ts-expect-error supabase nested
-            const tenant = t.tenant;
+            const tenant = t.tenant as unknown as { slug: string; name: string } | null;
             return (
               <Card
                 key={t.id}

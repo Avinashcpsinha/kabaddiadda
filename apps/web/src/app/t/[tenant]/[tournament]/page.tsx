@@ -85,11 +85,12 @@ export default async function PublicTournamentPage({
       .order('scheduled_at', { ascending: false }),
   ]);
 
-  const liveMatches = (matches ?? []).filter((m) => m.status === 'live');
-  const upcomingMatches = (matches ?? [])
+  const matchesTyped = (matches ?? []) as unknown as FixtureMatch[];
+  const liveMatches = matchesTyped.filter((m) => m.status === 'live');
+  const upcomingMatches = matchesTyped
     .filter((m) => m.status === 'scheduled')
     .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
-  const completedMatches = (matches ?? [])
+  const completedMatches = matchesTyped
     .filter((m) => m.status === 'completed')
     .slice(0, 10);
 
@@ -352,10 +353,8 @@ function FixtureRow({
   variant: 'live' | 'upcoming' | 'completed';
   brandColor: string | null;
 }) {
-  // @ts-expect-error supabase nested join
-  const home = match.home_team as FixtureMatch['home_team'];
-  // @ts-expect-error supabase nested join
-  const away = match.away_team as FixtureMatch['away_team'];
+  const home = match.home_team;
+  const away = match.away_team;
   const homeWon = match.home_score > match.away_score;
   const awayWon = match.away_score > match.home_score;
   const scheduled = new Date(match.scheduled_at);

@@ -74,13 +74,16 @@ export async function autoGenerateRoundRobinAction(tournamentId: string, startIs
   let matchIndex = 0;
   for (let i = 0; i < teams.length; i++) {
     for (let j = i + 1; j < teams.length; j++) {
+      const homeTeam = teams[i];
+      const awayTeam = teams[j];
+      if (!homeTeam || !awayTeam) continue;
       // Schedule one match per day at the same hour for now.
       const when = new Date(start.getTime() + matchIndex * 24 * 60 * 60 * 1000);
       inserts.push({
         tenant_id: user.tenantId,
         tournament_id: tournamentId,
-        home_team_id: teams[i].id,
-        away_team_id: teams[j].id,
+        home_team_id: homeTeam.id,
+        away_team_id: awayTeam.id,
         scheduled_at: when.toISOString(),
         round: `Round ${matchIndex + 1}`,
         status: 'scheduled',

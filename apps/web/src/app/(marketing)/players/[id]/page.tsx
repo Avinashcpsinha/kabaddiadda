@@ -76,7 +76,11 @@ export default async function PlayerProfilePage({
           .maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
-  const meta = ROLE_META[player.role] ?? ROLE_META.all_rounder;
+  const meta = ROLE_META[player.role] ?? ROLE_META.all_rounder ?? {
+    label: 'All-rounder',
+    icon: Sparkles,
+    tone: 'text-emerald-500',
+  };
 
   // Career and per-tournament stats + career ranking
   const [careerRes, seasonRes, careerRankRes] = await Promise.all([

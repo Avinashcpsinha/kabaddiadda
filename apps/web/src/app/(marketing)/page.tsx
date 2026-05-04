@@ -78,8 +78,8 @@ export default async function HomePage() {
   return (
     <>
       <Hero hostHref={hostHref} hostLabel={hostLabel} watchHref={watchHref} />
-      <LiveMatchesSection matches={liveMatches ?? []} />
-      <TournamentsSection tournaments={tournaments ?? []} />
+      <LiveMatchesSection matches={(liveMatches ?? []) as unknown as LiveMatchCard[]} />
+      <TournamentsSection tournaments={(tournaments ?? []) as unknown as TournamentCard[]} />
       <Features />
       <RolesSection
         hostHref={hostHref}
@@ -265,7 +265,7 @@ function LiveMatchesSection({ matches }: { matches: LiveMatchCard[] }) {
         </div>
 
         {/* HERO match — full-width split-color drama */}
-        <FeaturedMatchCard match={featured} />
+        <FeaturedMatchCard match={featured!} />
 
         {rest.length > 0 && (
           <>

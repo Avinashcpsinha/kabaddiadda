@@ -84,10 +84,8 @@ export default async function FeedHome() {
             ) : (
               <div className="space-y-3">
                 {liveMatches.map((m) => {
-                  // @ts-expect-error supabase nested
-                  const home = m.home_team;
-                  // @ts-expect-error supabase nested
-                  const away = m.away_team;
+                  const home = m.home_team as unknown as { name: string; short_name: string | null; primary_color: string | null } | null;
+                  const away = m.away_team as unknown as { name: string; short_name: string | null; primary_color: string | null } | null;
                   return (
                     <Link
                       key={m.id}
@@ -137,10 +135,8 @@ export default async function FeedHome() {
             ) : (
               <ul className="space-y-3 text-sm">
                 {upcoming.map((m) => {
-                  // @ts-expect-error supabase nested
-                  const home = m.home_team;
-                  // @ts-expect-error supabase nested
-                  const away = m.away_team;
+                  const home = m.home_team as unknown as { name: string; short_name: string | null } | null;
+                  const away = m.away_team as unknown as { name: string; short_name: string | null } | null;
                   return (
                     <li key={m.id} className="border-b border-border/30 pb-3 last:border-0 last:pb-0">
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">

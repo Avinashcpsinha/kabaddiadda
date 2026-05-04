@@ -66,8 +66,7 @@ export default async function FollowingPage() {
           </h2>
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {tournaments.map((t) => {
-              // @ts-expect-error supabase nested
-              const tenant = t.tenant;
+              const tenant = t.tenant as unknown as { slug: string; name: string } | null;
               return (
                 <Link key={t.id} href={`/t/${tenant?.slug}/${t.slug}`}>
                   <Card className="transition-all hover:border-primary/40">

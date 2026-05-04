@@ -298,10 +298,8 @@ export default async function TournamentReportPage({
           ) : (
             <ul className="divide-y divide-border/40">
               {matches.map((m) => {
-                // @ts-expect-error supabase nested
-                const home = m.home_team;
-                // @ts-expect-error supabase nested
-                const away = m.away_team;
+                const home = m.home_team as unknown as { name: string; short_name: string | null } | null;
+                const away = m.away_team as unknown as { name: string; short_name: string | null } | null;
                 return (
                   <li key={m.id}>
                     <Link

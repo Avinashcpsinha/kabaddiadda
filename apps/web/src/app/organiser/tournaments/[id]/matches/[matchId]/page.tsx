@@ -48,10 +48,8 @@ export default async function MatchDetailPage({
     .order('created_at', { ascending: false })
     .limit(50);
 
-  // @ts-expect-error supabase nested type
-  const home = match.home_team;
-  // @ts-expect-error supabase nested type
-  const away = match.away_team;
+  const home = match.home_team as unknown as { id: string; name: string; short_name: string | null; primary_color: string | null } | null;
+  const away = match.away_team as unknown as { id: string; name: string; short_name: string | null; primary_color: string | null } | null;
 
   return (
     <div className="space-y-6">

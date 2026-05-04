@@ -49,7 +49,11 @@ export function HorizontalBarChart({
             borderRadius: 6,
             fontSize: 12,
           }}
-          formatter={(value: number) => [valueFormatter ? valueFormatter(value) : value, 'Points']}
+          formatter={(value) => {
+            if (value == null) return ['', ''];
+            const num = typeof value === 'number' ? value : Number(value);
+            return [valueFormatter ? valueFormatter(num) : num, 'Points'];
+          }}
         />
         <Bar dataKey="value" radius={[0, 4, 4, 0]}>
           {data.map((row, i) => (

@@ -132,7 +132,7 @@ export default async function PlayersPage({
                   ...(q ? { q } : {}),
                   ...(leagueFilter ? { league: leagueFilter } : {}),
                 }).toString()}`}
-                label={ROLE_META[r].label}
+                label={ROLE_META[r]?.label ?? r}
                 active={roleFilter === r}
                 q={q}
                 league={leagueFilter}
@@ -180,7 +180,11 @@ export default async function PlayersPage({
           <CardContent className="p-0">
             <ul className="divide-y divide-border/40">
               {players.map((p) => {
-                const meta = ROLE_META[p.role] ?? ROLE_META.all_rounder;
+                const meta = ROLE_META[p.role] ?? ROLE_META.all_rounder ?? {
+                  label: 'All-rounder',
+                  icon: Sparkles,
+                  tone: 'text-emerald-500',
+                };
                 const team = p.team_id ? teamById.get(p.team_id) : null;
                 const tenant = p.tenant_id ? tenantById.get(p.tenant_id) : null;
                 return (

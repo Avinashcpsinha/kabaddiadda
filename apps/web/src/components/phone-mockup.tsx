@@ -58,7 +58,7 @@ export function PhoneMockup() {
     return () => clearInterval(id);
   }, []);
 
-  const screen = SCREENS[index];
+  const screen = SCREENS[index] ?? SCREENS[0]!;
   const activeNav = NAV_FOR_SCREEN[screen];
 
   return (

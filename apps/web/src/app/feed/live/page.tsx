@@ -36,12 +36,9 @@ export default async function LiveListPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {matches.map((m) => {
-            // @ts-expect-error supabase nested
-            const home = m.home_team;
-            // @ts-expect-error supabase nested
-            const away = m.away_team;
-            // @ts-expect-error supabase nested
-            const tournament = m.tournament;
+            const home = m.home_team as unknown as { name: string; short_name: string | null; primary_color: string | null } | null;
+            const away = m.away_team as unknown as { name: string; short_name: string | null; primary_color: string | null } | null;
+            const tournament = m.tournament as unknown as { name: string; slug: string; tenant: { slug: string } | null } | null;
             return (
               <Link key={m.id} href={`/live/${m.id}`}>
                 <Card className="group h-full transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/5">

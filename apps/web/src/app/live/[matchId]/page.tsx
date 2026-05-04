@@ -152,9 +152,7 @@ export default async function PublicLivePage({
     }
   }
 
-  // @ts-expect-error supabase nested
-  const tournament = match.tournament;
-  // @ts-expect-error supabase nested
+  const tournament = match.tournament as unknown as { name: string; slug: string; tenant: { slug: string; name: string } | null } | null;
   const tenant = tournament?.tenant;
 
   return (

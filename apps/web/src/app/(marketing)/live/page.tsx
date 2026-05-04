@@ -148,9 +148,7 @@ export default async function LivePage() {
             <CardContent className="p-0">
               <ul className="divide-y divide-border/40">
                 {upcomingMatches.map((m) => {
-                  // @ts-expect-error supabase nested
                   const home = m.home_team;
-                  // @ts-expect-error supabase nested
                   const away = m.away_team;
                   const scheduled = new Date(m.scheduled_at);
                   return (
