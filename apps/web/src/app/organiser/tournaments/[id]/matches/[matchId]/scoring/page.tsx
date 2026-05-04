@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, ExternalLink } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Tv } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getSessionUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
+import { BroadcastOverlayHelp } from '../broadcast-overlay-help';
 import { ScoringConsole } from './scoring-console';
 
 export default async function ScoringPage({
@@ -155,7 +156,7 @@ export default async function ScoringPage({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <Link
           href={`/organiser/tournaments/${id}/matches/${matchId}`}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -163,13 +164,22 @@ export default async function ScoringPage({
           <ArrowLeft className="h-3 w-3" />
           Match details
         </Link>
-        <Button asChild variant="outline" size="sm">
-          <Link href={`/live/${matchId}`} target="_blank">
-            <ExternalLink className="h-3 w-3" />
-            Public live page
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/overlay/match/${matchId}`} target="_blank">
+              <Tv className="h-3 w-3" />
+              Broadcast overlay
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/live/${matchId}`} target="_blank">
+              <ExternalLink className="h-3 w-3" />
+              Public live page
+            </Link>
+          </Button>
+        </div>
       </div>
+      <BroadcastOverlayHelp matchId={matchId} />
 
       <ScoringConsole
         matchId={matchId}
