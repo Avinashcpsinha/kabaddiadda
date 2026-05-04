@@ -1307,8 +1307,7 @@ export function ScoringConsole({
                 label="T+B"
                 sub={`+${Math.max(touchedCount, 1) + 1}`}
                 onClick={() => {
-                  // Default +2 (auto-strike #1 defender + bonus) when none selected.
-                  const points = Math.max(touchedCount, 1) + 1;
+                  const points = touchedCount + 1;
                   stageOrRun('T+B', `+${points}`, 'attack', () =>
                     record('raid_point', points, 0, {
                       includeRaider: true,
@@ -1316,13 +1315,13 @@ export function ScoringConsole({
                     }),
                   );
                 }}
-                disabled={!isLive || pending || !raiderId}
+                disabled={!isLive || pending || !raiderId || touchedCount === 0}
                 tone="attack"
                 title={
                   !raiderId
                     ? 'Pick the raider first'
                     : touchedCount === 0
-                      ? 'T+B — no defender picked, the lowest-jersey defender on mat will be marked OUT plus bonus (Attack +2).'
+                      ? 'Tap the defender(s) touched — T+B = touch(es) + bonus on the same raid'
                       : `Touch + Bonus — ${touchedCount} touch(es) and bonus line crossed. Attack +${touchedCount + 1}.`
                 }
                 staged={pendingAction?.label === 'T+B'}
@@ -1795,8 +1794,7 @@ const PRIMARY_ACTION_DOCS: ActionDoc[] = [
     scoring: 'Attack +(N+1)',
     description:
       'Touch + Bonus on the same raid: N touches scored AND bonus line crossed. Touched defenders OUT.',
-    note: 'If no defender chip is selected, the lowest-jersey defender on mat is auto-marked OUT (Attack +2).',
-    selection: 'Raider (defenders optional — auto-strikes #1 if none picked)',
+    selection: 'Raider + 1+ defenders touched',
     tone: 'attack',
   },
   {
