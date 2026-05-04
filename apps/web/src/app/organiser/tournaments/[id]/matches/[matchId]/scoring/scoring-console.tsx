@@ -1050,7 +1050,10 @@ export function ScoringConsole({
               </div>
             </div>
 
-            <div className="flex flex-col gap-1">
+            {/* Match controls — single horizontal row beside the clock so all
+                three buttons sit on the same line as the timers instead of
+                tower-stacking under the Resume button. */}
+            <div className="flex items-center gap-1">
               {status === 'scheduled' && (
                 <Button onClick={startMatch} variant="flame">
                   <Play className="h-4 w-4" />
@@ -1067,22 +1070,20 @@ export function ScoringConsole({
                   >
                     {running ? (
                       <>
-                        <Pause className="h-3 w-3" /> Pause match
+                        <Pause className="h-3 w-3" /> Pause
                       </>
                     ) : (
                       <>
-                        <Play className="h-3 w-3" /> Resume match
+                        <Play className="h-3 w-3" /> Resume
                       </>
                     )}
                   </Button>
-                  <div className="flex gap-1">
-                    <Button onClick={pauseMatch} variant="outline" size="sm" className="flex-1">
-                      Half time
-                    </Button>
-                    <Button onClick={endMatch} variant="destructive" size="sm" className="flex-1">
-                      End
-                    </Button>
-                  </div>
+                  <Button onClick={pauseMatch} variant="outline" size="sm">
+                    Half time
+                  </Button>
+                  <Button onClick={endMatch} variant="destructive" size="sm">
+                    End
+                  </Button>
                 </>
               )}
               {status === 'half_time' && (
