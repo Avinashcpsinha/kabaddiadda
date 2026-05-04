@@ -16,16 +16,13 @@ export async function generateMetadata({
 
 /**
  * Broadcaster overlay — meant to be loaded as an OBS / Streamyard browser
- * source. Renders a 100%-wide × 120px strip pinned to the bottom of the
- * viewport with team logos, scores, half + clock, raid timer, and live
- * context badges (do-or-die, all-out, current raider). Subscribes to the
- * same Supabase realtime channels the public live page uses, so updates
- * are pushed in real time.
+ * source. Renders a transparent strip pinned to the bottom of the canvas
+ * with team logos, scores, dual timers (match + raid), per-side status
+ * dots (green = on mat, red = OUT), and side-specific text:
+ *   • the attacking team's side shows the current raider name
+ *   • the other side shows the most recent event's commentary
  *
- * Recommended OBS settings:
- *   • Width 1920, Height 200 (gives a little headroom for the strip)
- *   • Custom CSS (none required)
- *   • Refresh browser when scene becomes active: ON
+ * Recommended OBS settings: 1920×220 browser source, transparent canvas.
  */
 export default async function OverlayPage({
   params,
@@ -41,6 +38,7 @@ export default async function OverlayPage({
       `id, status, home_score, away_score, current_half, clock_seconds,
        current_raider_id, current_attacking_team_id,
        home_dod_counter, away_dod_counter,
+       home_team_id, away_team_id,
        home_team:home_team_id(id, name, short_name, primary_color),
        away_team:away_team_id(id, name, short_name, primary_color)`,
     )
@@ -49,20 +47,68 @@ export default async function OverlayPage({
 
   if (!match) notFound();
 
-  // Resolve the in-progress raider's name so the badge can render on first
-  // paint (before any realtime broadcast arrives).
+  // Lineups + per-player state — drives the green/red dots.
+  const [lineupsRes, statesRes, lastEventsRes] = await Promise.all([
+    supabase
+      .from('match_lineups')
+      .select('team_id, starting_player_ids')
+      .eq('match_id', matchId),
+    supabase
+      .from('match_player_state')
+      .select('player_id, team_id, state')
+      .eq('match_id', matchId),
+    supabase
+      .from('match_events')
+      .select(
+        'id, type, attacking_team_id, points_attacker, points_defender, raider_id, defender_ids, details, created_at',
+      )
+      .eq('match_id', matchId)
+      .order('created_at', { ascending: false })
+      .limit(1),
+  ]);
+
+  const stateById = new Map<string, string>(
+    (statesRes.data ?? []).map((s) => [s.player_id, s.state]),
+  );
+
+  function buildSlots(teamId: string) {
+    const lineup = lineupsRes.data?.find((l) => l.team_id === teamId);
+    const ids = (lineup?.starting_player_ids ?? []) as string[];
+    return ids.map((playerId) => ({
+      playerId,
+      state: stateById.get(playerId) ?? 'on_mat',
+    }));
+  }
+
+  // Fetch every rostered player for both teams in one go — gives the client
+  // a complete name lookup so realtime events arriving with raw player IDs
+  // (raider_id / defender_ids) can render with names without a round-trip.
+  const { data: players } = await supabase
+    .from('players')
+    .select('id, full_name, jersey_number')
+    .in('team_id', [match.home_team_id, match.away_team_id]);
+
+  const playerMap: Record<string, { fullName: string; jerseyNumber: number | null }> = {};
+  for (const p of players ?? []) {
+    playerMap[p.id] = { fullName: p.full_name, jerseyNumber: p.jersey_number };
+  }
+
+  function lookupPlayer(id: string | null | undefined) {
+    if (!id) return null;
+    const p = playerMap[id];
+    if (!p) return null;
+    return { fullName: p.fullName, jerseyNumber: p.jerseyNumber };
+  }
+
+  // Resolve in-progress raider name for first paint.
   let initialRaider: {
     fullName: string;
     jerseyNumber: number | null;
     teamName: string;
   } | null = null;
   if (match.current_raider_id && match.current_attacking_team_id) {
-    const { data: player } = await supabase
-      .from('players')
-      .select('full_name, jersey_number')
-      .eq('id', match.current_raider_id)
-      .maybeSingle();
-    if (player) {
+    const p = lookupPlayer(match.current_raider_id);
+    if (p) {
       // @ts-expect-error supabase nested join
       const homeId: string = match.home_team.id;
       const teamName =
@@ -71,13 +117,30 @@ export default async function OverlayPage({
             (match.home_team.name as string)
           : // @ts-expect-error supabase nested join
             (match.away_team.name as string);
-      initialRaider = {
-        fullName: player.full_name,
-        jerseyNumber: player.jersey_number,
-        teamName,
-      };
+      initialRaider = { ...p, teamName };
     }
   }
+
+  // Last event, enriched with player refs for the commentary line.
+  const last = lastEventsRes.data?.[0];
+  const initialLastEvent = last
+    ? {
+        type: last.type,
+        attackingTeamId: last.attacking_team_id,
+        pointsAttacker: last.points_attacker,
+        pointsDefender: last.points_defender,
+        raider: lookupPlayer(last.raider_id),
+        defenders: ((last.defender_ids as string[] | null) ?? [])
+          .map((id) => lookupPlayer(id))
+          .filter((p): p is { fullName: string; jerseyNumber: number | null } => p !== null),
+        details: (last.details as Record<string, unknown> | null) ?? null,
+      }
+    : null;
+
+  // @ts-expect-error supabase nested join
+  const homeId: string = match.home_team.id;
+  // @ts-expect-error supabase nested join
+  const awayId: string = match.away_team.id;
 
   return (
     <OverlayStrip
@@ -96,6 +159,10 @@ export default async function OverlayPage({
         home: match.home_team,
         // @ts-expect-error supabase nested join
         away: match.away_team,
+        homeSlots: buildSlots(homeId),
+        awaySlots: buildSlots(awayId),
+        lastEvent: initialLastEvent,
+        playerMap,
       }}
     />
   );

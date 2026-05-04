@@ -14,10 +14,28 @@ interface TeamLite {
   primary_color: string | null;
 }
 
-interface RaiderRef {
+interface PlayerRef {
   fullName: string;
   jerseyNumber: number | null;
+}
+
+interface RaiderRef extends PlayerRef {
   teamName: string;
+}
+
+interface SlotRef {
+  playerId: string;
+  state: string;
+}
+
+interface LastEvent {
+  type: string;
+  attackingTeamId: string;
+  pointsAttacker: number;
+  pointsDefender: number;
+  raider: PlayerRef | null;
+  defenders: PlayerRef[];
+  details: Record<string, unknown> | null;
 }
 
 interface InitialState {
@@ -32,12 +50,85 @@ interface InitialState {
   currentRaider: RaiderRef | null;
   home: TeamLite;
   away: TeamLite;
+  homeSlots: SlotRef[];
+  awaySlots: SlotRef[];
+  lastEvent: LastEvent | null;
+  playerMap: Record<string, { fullName: string; jerseyNumber: number | null }>;
 }
 
 function fmt(seconds: number): string {
   const mm = Math.floor(seconds / 60).toString().padStart(2, '0');
   const ss = (seconds % 60).toString().padStart(2, '0');
   return `${mm}:${ss}`;
+}
+
+function shortPlayer(p: PlayerRef): string {
+  const first = p.fullName.split(' ')[0] ?? p.fullName;
+  return p.jerseyNumber != null ? `${first} #${p.jerseyNumber}` : first;
+}
+
+/**
+ * Builds a one-line commentary for the most recent event. Mirrors the
+ * scoring console's describeEvent but trimmed to fit a broadcast strip.
+ */
+function describeLastEvent(e: LastEvent): string {
+  const r = e.raider ? shortPlayer(e.raider) : '';
+  const d = e.defenders[0] ? shortPlayer(e.defenders[0]) : '';
+  const reason =
+    e.details && typeof e.details === 'object' && 'reason' in e.details
+      ? (e.details.reason as string)
+      : null;
+
+  switch (e.type) {
+    case 'raid_point':
+      if (reason === 'bonus_plus_defender_self_out') {
+        return r ? `${r} bonus +${e.pointsAttacker}` : `Bonus + def out +${e.pointsAttacker}`;
+      }
+      if (reason === 'defender_self_out' || reason === 'defender_out_of_bounds') {
+        return `Defender out +${e.pointsAttacker}`;
+      }
+      return r ? `${r} touch +${e.pointsAttacker}` : `Touch +${e.pointsAttacker}`;
+    case 'super_raid':
+      return r ? `${r} super raid +${e.pointsAttacker}` : `Super raid +${e.pointsAttacker}`;
+    case 'bonus_point':
+      return r ? `${r} bonus +1` : 'Bonus +1';
+    case 'tackle_point':
+      if (reason === 'bonus_plus_tackle') return r ? `${r} B+T` : 'Bonus + Tackle';
+      if (reason === 'bonus_plus_self_out') return r ? `${r} B+SO` : 'Bonus + Self-out';
+      if (reason === 'raider_self_out') return r ? `${r} self out` : 'Self out';
+      if (reason === 'raider_out_of_bounds') return r ? `${r} out` : 'Raider out';
+      return d ? `${d} tackled ${r || 'raider'} +1` : r ? `Tackle on ${r} +1` : 'Tackle +1';
+    case 'super_tackle':
+      return d
+        ? `${d} super tackle +2`
+        : r
+          ? `Super tackle on ${r} +2`
+          : 'Super tackle +2';
+    case 'all_out':
+      return 'All-out +2';
+    case 'do_or_die_raid':
+      return e.pointsAttacker > 0
+        ? r
+          ? `${r} DoD scored +${e.pointsAttacker}`
+          : `DoD scored +${e.pointsAttacker}`
+        : r
+          ? `${r} DoD failed`
+          : 'DoD failed';
+    case 'empty_raid':
+      return r ? `${r} empty raid` : 'Empty raid';
+    case 'green_card':
+      return 'Green card';
+    case 'yellow_card':
+      return 'Yellow card';
+    case 'red_card':
+      return 'Red card';
+    case 'substitution':
+      return 'Substitution';
+    case 'technical_point':
+      return `Tech +${e.pointsAttacker}`;
+    default:
+      return e.type;
+  }
 }
 
 export function OverlayStrip({
@@ -49,6 +140,7 @@ export function OverlayStrip({
 }) {
   const home = initial.home;
   const away = initial.away;
+  const [playerMap] = React.useState(initial.playerMap);
 
   const [status, setStatus] = React.useState(initial.status);
   const [homeScore, setHomeScore] = React.useState(initial.homeScore);
@@ -66,11 +158,25 @@ export function OverlayStrip({
   );
   const [homeDod, setHomeDod] = React.useState(initial.homeDodCounter);
   const [awayDod, setAwayDod] = React.useState(initial.awayDodCounter);
-  // teamId that just got all-out'd — pulses for 5s as a "+2 to other side" cue.
   const [allOutFlash, setAllOutFlash] = React.useState<string | null>(null);
+  const [homeSlots, setHomeSlots] = React.useState<SlotRef[]>(initial.homeSlots);
+  const [awaySlots, setAwaySlots] = React.useState<SlotRef[]>(initial.awaySlots);
+  const [lastEvent, setLastEvent] = React.useState<LastEvent | null>(initial.lastEvent);
 
-  // Realtime — score / status come from postgres_changes on the matches row,
-  // timer + raid + raider come from the broadcast channel the scoring console
+  const lookup = React.useCallback(
+    (id: string | null | undefined): PlayerRef | null => {
+      if (!id) return null;
+      const p = playerMap[id];
+      if (!p) return null;
+      return { fullName: p.fullName, jerseyNumber: p.jerseyNumber };
+    },
+    [playerMap],
+  );
+
+  // Realtime — score + status + DoD counters from postgres_changes on
+  // matches; per-player slot state from postgres_changes on
+  // match_player_state; last-event commentary from match_events INSERT;
+  // timer + raid + raider from the broadcast channel the scoring console
   // already pushes to (1Hz heartbeat from the operator's open console).
   React.useEffect(() => {
     const supabase = createClient();
@@ -110,6 +216,43 @@ export function OverlayStrip({
             setAllOutFlash((e.attacking_team_id as string) ?? null);
             setTimeout(() => setAllOutFlash(null), 5000);
           }
+          // Update the running last-event commentary for the side panels.
+          const defenders = ((e.defender_ids as string[] | null) ?? [])
+            .map((id) => lookup(id))
+            .filter((p): p is PlayerRef => p !== null);
+          setLastEvent({
+            type: e.type as string,
+            attackingTeamId: (e.attacking_team_id as string) ?? '',
+            pointsAttacker: (e.points_attacker as number) ?? 0,
+            pointsDefender: (e.points_defender as number) ?? 0,
+            raider: lookup(e.raider_id as string | null),
+            defenders,
+            details: (e.details as Record<string, unknown> | null) ?? null,
+          });
+        },
+      )
+      // Slot dots — any state change (out, revival, sub, suspension) refreshes.
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'match_player_state',
+          filter: `match_id=eq.${matchId}`,
+        },
+        async () => {
+          const { data } = await supabase
+            .from('match_player_state')
+            .select('player_id, team_id, state')
+            .eq('match_id', matchId);
+          if (!data) return;
+          const stateById = new Map(data.map((s) => [s.player_id, s.state]));
+          setHomeSlots((prev) =>
+            prev.map((s) => ({ ...s, state: stateById.get(s.playerId) ?? s.state })),
+          );
+          setAwaySlots((prev) =>
+            prev.map((s) => ({ ...s, state: stateById.get(s.playerId) ?? s.state })),
+          );
         },
       )
       .subscribe();
@@ -140,7 +283,7 @@ export function OverlayStrip({
       void supabase.removeChannel(matchChannel);
       void supabase.removeChannel(timerChannel);
     };
-  }, [matchId]);
+  }, [matchId, lookup]);
 
   // Local 1Hz tick keeps the displayed clock smooth between broadcasts.
   React.useEffect(() => {
@@ -165,9 +308,29 @@ export function OverlayStrip({
     (homeAttacking && homeDod >= 2) || (awayAttacking && awayDod >= 2);
   const isLive = status === 'live';
 
+  // Per-side bottom label: raider on the attacking side, last-event on
+  // the side that just scored. Falls back to nothing when neither applies.
+  const lastEventText = lastEvent ? describeLastEvent(lastEvent) : null;
+  const homeLabel =
+    homeAttacking && currentRaider
+      ? `▶ ${shortPlayer(currentRaider)}`
+      : lastEvent && lastEvent.attackingTeamId === home.id && lastEventText
+        ? lastEventText
+        : null;
+  const awayLabel =
+    awayAttacking && currentRaider
+      ? `▶ ${shortPlayer(currentRaider)}`
+      : lastEvent && lastEvent.attackingTeamId === away.id && lastEventText
+        ? lastEventText
+        : null;
+  const homeLabelTone =
+    homeAttacking && currentRaider ? 'raider' : 'event';
+  const awayLabelTone =
+    awayAttacking && currentRaider ? 'raider' : 'event';
+
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 flex justify-center px-4 pb-4">
-      <div className="relative flex h-[120px] w-full max-w-[1920px] items-stretch overflow-hidden rounded-2xl bg-zinc-950/92 text-white shadow-[0_20px_60px_rgba(0,0,0,0.5)] backdrop-blur-xl ring-1 ring-white/10">
+      <div className="relative flex h-[170px] w-full max-w-[1920px] items-stretch overflow-hidden rounded-2xl bg-zinc-950/92 text-white shadow-[0_20px_60px_rgba(0,0,0,0.5)] backdrop-blur-xl ring-1 ring-white/10">
         {/* Top accent bar — gradient + DoD/all-out pulse */}
         <div
           className={cn(
@@ -186,10 +349,13 @@ export function OverlayStrip({
           score={homeScore}
           align="left"
           attacking={homeAttacking}
+          slots={homeSlots}
+          label={homeLabel}
+          labelTone={homeLabelTone}
         />
 
-        {/* CENTER — half / clock / status */}
-        <div className="flex shrink-0 flex-col items-center justify-center px-8">
+        {/* CENTER — half + match clock + raid clock + status */}
+        <div className="flex shrink-0 flex-col items-center justify-center gap-0.5 px-6">
           <div className="text-[10px] font-semibold uppercase tracking-[0.32em] text-zinc-400">
             Q{half}
           </div>
@@ -203,6 +369,7 @@ export function OverlayStrip({
             {fmt(remaining)}
           </div>
           <StatusPill status={status} />
+          <RaidTimer raidLeft={raidLeft} raidRunning={raidRunning} />
         </div>
 
         {/* AWAY side */}
@@ -211,20 +378,13 @@ export function OverlayStrip({
           score={awayScore}
           align="right"
           attacking={awayAttacking}
+          slots={awaySlots}
+          label={awayLabel}
+          labelTone={awayLabelTone}
         />
 
-        {/* CONTEXT BADGES — top-right corner, stack horizontally */}
+        {/* CONTEXT BADGES — top-right corner */}
         <div className="absolute right-3 top-2 flex gap-1.5">
-          {raidRunning && currentRaider && (
-            <ContextBadge
-              tone="orange"
-              label={`${currentRaider.fullName.split(' ')[0]}${
-                currentRaider.jerseyNumber != null
-                  ? ` #${currentRaider.jerseyNumber}`
-                  : ''
-              } · ${raidLeft}s`}
-            />
-          )}
           {dodActive && <ContextBadge tone="rose" label="Do-or-die" pulse />}
           {allOutFlash && (
             <ContextBadge tone="emerald" label="All-out +2" pulse />
@@ -252,16 +412,22 @@ function TeamSide({
   score,
   align,
   attacking,
+  slots,
+  label,
+  labelTone,
 }: {
   team: TeamLite;
   score: number;
   align: 'left' | 'right';
   attacking: boolean;
+  slots: SlotRef[];
+  label: string | null;
+  labelTone: 'raider' | 'event';
 }) {
   const logo = (
     <div
       className={cn(
-        'flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-2xl text-xl font-black text-white shadow-lg ring-2',
+        'flex h-[80px] w-[80px] shrink-0 items-center justify-center rounded-2xl text-xl font-black text-white shadow-lg ring-2',
         attacking ? 'ring-orange-400' : 'ring-white/10',
       )}
       style={{
@@ -274,14 +440,29 @@ function TeamSide({
     </div>
   );
 
-  const text = (
-    <div className={cn(align === 'left' ? 'text-left' : 'text-right')}>
-      <div className="text-xs font-semibold uppercase tracking-widest text-zinc-300">
+  const content = (
+    <div className={cn('flex flex-col gap-1', align === 'right' && 'items-end')}>
+      <div className="text-[11px] font-semibold uppercase tracking-widest text-zinc-300">
         {team.short_name || team.name.slice(0, 3).toUpperCase()}
       </div>
-      <div className="font-mono text-[64px] font-black leading-none tabular-nums">
+      <div className="font-mono text-[56px] font-black leading-none tabular-nums">
         {score}
       </div>
+      <SlotDots slots={slots} align={align} />
+      {label && (
+        <div
+          className={cn(
+            'max-w-[260px] truncate text-[11px] font-medium',
+            labelTone === 'raider'
+              ? 'text-orange-300'
+              : 'text-zinc-300',
+            align === 'right' && 'text-right',
+          )}
+          title={label}
+        >
+          {label}
+        </div>
+      )}
     </div>
   );
 
@@ -289,20 +470,83 @@ function TeamSide({
     <div
       className={cn(
         'flex flex-1 items-center gap-4',
-        align === 'left' ? 'justify-end pl-6 pr-4' : 'flex-row-reverse justify-end pl-4 pr-6',
+        align === 'left' ? 'justify-end pl-6 pr-4' : 'flex-row-reverse pl-4 pr-6',
       )}
     >
-      {align === 'left' ? (
-        <>
-          {logo}
-          {text}
-        </>
-      ) : (
-        <>
-          {logo}
-          {text}
-        </>
+      {logo}
+      {content}
+    </div>
+  );
+}
+
+function SlotDots({ slots, align }: { slots: SlotRef[]; align: 'left' | 'right' }) {
+  // Mirror the public live page: bench / red-carded players are not shown.
+  // Suspended count as out (red) so the broadcast strip stays a clean
+  // green / red pair as the user requested.
+  const active = slots.filter(
+    (s) =>
+      s.state === 'on_mat' ||
+      s.state === 'out' ||
+      s.state === 'suspended' ||
+      s.state === 'red_carded',
+  );
+  if (active.length === 0) return null;
+  const onMatCount = active.filter((s) => s.state === 'on_mat').length;
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-1.5',
+        align === 'right' && 'flex-row-reverse',
       )}
+    >
+      <div className="flex gap-1">
+        {active.map((s, i) => (
+          <span
+            key={`${s.playerId}-${i}`}
+            className={cn(
+              'h-2.5 w-2.5 rounded-full ring-1 transition-colors',
+              s.state === 'on_mat'
+                ? 'bg-emerald-500 ring-emerald-400/60'
+                : 'bg-rose-500 ring-rose-400/60',
+            )}
+          />
+        ))}
+      </div>
+      <span className="font-mono text-[10px] font-semibold text-zinc-400">
+        {onMatCount}/{active.length}
+      </span>
+    </div>
+  );
+}
+
+function RaidTimer({
+  raidLeft,
+  raidRunning,
+}: {
+  raidLeft: number;
+  raidRunning: boolean;
+}) {
+  if (!raidRunning && raidLeft === 0) {
+    return (
+      <div className="text-[9px] font-semibold uppercase tracking-[0.28em] text-zinc-600">
+        no raid
+      </div>
+    );
+  }
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-1 font-mono text-xs font-bold tabular-nums',
+        raidLeft > 15 && 'text-emerald-400',
+        raidLeft <= 15 && raidLeft > 10 && 'text-amber-400',
+        raidLeft <= 10 && raidLeft > 5 && 'text-orange-400',
+        raidLeft <= 5 && 'animate-pulse text-rose-500',
+      )}
+    >
+      <span className="text-[9px] uppercase tracking-[0.28em] opacity-70">
+        Raid
+      </span>
+      {raidLeft.toString().padStart(2, '0')}s
     </div>
   );
 }
@@ -310,7 +554,7 @@ function TeamSide({
 function StatusPill({ status }: { status: string }) {
   if (status === 'live') {
     return (
-      <div className="mt-0.5 flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.28em] text-rose-400">
+      <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.28em] text-rose-400">
         <span className="relative flex h-1.5 w-1.5">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75" />
           <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-rose-400" />
@@ -321,20 +565,20 @@ function StatusPill({ status }: { status: string }) {
   }
   if (status === 'half_time') {
     return (
-      <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.28em] text-amber-400">
+      <div className="text-[9px] font-bold uppercase tracking-[0.28em] text-amber-400">
         Half time
       </div>
     );
   }
   if (status === 'completed') {
     return (
-      <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.28em] text-emerald-400">
+      <div className="text-[9px] font-bold uppercase tracking-[0.28em] text-emerald-400">
         Final
       </div>
     );
   }
   return (
-    <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.28em] text-zinc-500">
+    <div className="text-[9px] font-bold uppercase tracking-[0.28em] text-zinc-500">
       Scheduled
     </div>
   );

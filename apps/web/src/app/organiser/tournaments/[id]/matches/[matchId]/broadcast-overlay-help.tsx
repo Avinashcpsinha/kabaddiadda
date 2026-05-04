@@ -27,7 +27,7 @@ URL: ${url}
 
 OBS / Streamyard / Restream / vMix — add this URL as a Browser Source:
   • Width:  1920
-  • Height: 200
+  • Height: 240
   • Tick "Refresh browser when scene becomes active"
   • Place at the bottom of your scene (no other CSS needed — canvas is transparent)
 
