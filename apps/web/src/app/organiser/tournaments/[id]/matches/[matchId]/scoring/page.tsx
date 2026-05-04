@@ -29,7 +29,7 @@ export default async function ScoringPage({
   const { data: events } = await supabase
     .from('match_events')
     .select(
-      'id, type, half, clock_seconds, points_attacker, points_defender, attacking_team_id, raider_id, defender_ids, created_at',
+      'id, type, half, clock_seconds, points_attacker, points_defender, attacking_team_id, raider_id, defender_ids, details, created_at',
     )
     .eq('match_id', matchId)
     .order('created_at', { ascending: false })
@@ -51,13 +51,19 @@ export default async function ScoringPage({
   );
 
   // Player IDs we need names + jerseys for: every rostered player (state row)
-  // PLUS every raider / defender referenced in recent events (for commentary).
+  // PLUS every raider / defender / sub player referenced in recent events.
   const referencedIds = new Set<string>();
   for (const s of statesRes.data ?? []) referencedIds.add(s.player_id);
   for (const e of events ?? []) {
     if (e.raider_id) referencedIds.add(e.raider_id);
     const defenders = (e.defender_ids as string[] | null) ?? [];
     for (const id of defenders) referencedIds.add(id);
+    // Substitution events store the swap in details: { in, out }.
+    if (e.type === 'substitution' && e.details) {
+      const d = e.details as { in?: string; out?: string };
+      if (d.in) referencedIds.add(d.in);
+      if (d.out) referencedIds.add(d.out);
+    }
   }
 
   const playerById = new Map<
@@ -85,20 +91,28 @@ export default async function ScoringPage({
     return { fullName: p.full_name, jerseyNumber: p.jersey_number };
   }
 
-  const enrichedEvents = (events ?? []).map((e) => ({
-    id: e.id,
-    type: e.type,
-    half: e.half,
-    clock_seconds: e.clock_seconds,
-    points_attacker: e.points_attacker,
-    points_defender: e.points_defender,
-    attacking_team_id: e.attacking_team_id,
-    created_at: e.created_at,
-    raider: lookupPlayer(e.raider_id),
-    defenders: ((e.defender_ids as string[] | null) ?? [])
-      .map((id) => lookupPlayer(id))
-      .filter((p): p is { fullName: string; jerseyNumber: number | null } => p !== null),
-  }));
+  const enrichedEvents = (events ?? []).map((e) => {
+    const subDetails =
+      e.type === 'substitution' && e.details
+        ? (e.details as { in?: string; out?: string })
+        : null;
+    return {
+      id: e.id,
+      type: e.type,
+      half: e.half,
+      clock_seconds: e.clock_seconds,
+      points_attacker: e.points_attacker,
+      points_defender: e.points_defender,
+      attacking_team_id: e.attacking_team_id,
+      created_at: e.created_at,
+      raider: lookupPlayer(e.raider_id),
+      defenders: ((e.defender_ids as string[] | null) ?? [])
+        .map((id) => lookupPlayer(id))
+        .filter((p): p is { fullName: string; jerseyNumber: number | null } => p !== null),
+      playerIn: subDetails ? lookupPlayer(subDetails.in ?? null) : null,
+      playerOut: subDetails ? lookupPlayer(subDetails.out ?? null) : null,
+    };
+  });
 
   // Build slots from match_player_state — gives ALL rostered players (mat,
   // bench, out, suspended, red-carded), not just the original starters.

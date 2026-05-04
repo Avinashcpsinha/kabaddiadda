@@ -47,6 +47,8 @@ import {
   deleteMatchEventAction,
   expireCardAction,
   persistTimerStateAction,
+  recordBonusPlusDefenderSelfOutAction,
+  recordBonusPlusSelfOutAction,
   recordBonusPlusTackleAction,
   recordCardAction,
   recordMatchEventAction,
@@ -84,6 +86,9 @@ interface RecentEvent {
   created_at: string;
   raider: PlayerRef | null;
   defenders: PlayerRef[];
+  /** Substitution-only — populated for type==='substitution' events. */
+  playerIn?: PlayerRef | null;
+  playerOut?: PlayerRef | null;
 }
 
 interface InitialState {
@@ -126,6 +131,14 @@ const EVENT_LABEL: Record<string, string> = {
   do_or_die_raid: 'Do-or-die raid',
   empty_raid: 'Empty raid',
   time_out: 'Time out',
+  substitution: 'Substitution',
+  green_card: 'Green card',
+  yellow_card: 'Yellow card',
+  red_card: 'Red card',
+  card_expired: 'Card expired',
+  technical_point: 'Technical point',
+  review_upheld: 'Review upheld',
+  review_overturned: 'Review overturned',
 };
 
 function shortName(full: string): string {
@@ -173,6 +186,14 @@ function describeEvent(e: RecentEvent): string {
       return raider ? `${raider} empty` : 'Empty raid';
     case 'all_out':
       return 'All out';
+    case 'substitution': {
+      const inText = e.playerIn ? formatPlayer(e.playerIn) : null;
+      const outText = e.playerOut ? formatPlayer(e.playerOut) : null;
+      if (inText && outText) return `Sub: ${inText} IN, ${outText} OUT`;
+      if (inText) return `Sub: ${inText} IN`;
+      if (outText) return `Sub: ${outText} OUT`;
+      return 'Substitution';
+    }
     default:
       return fallback;
   }
@@ -572,6 +593,68 @@ export function ScoringConsole({
     });
   }
 
+  // Bonus + Raider self-out — raider crossed the bonus line (attack +1)
+  // and then voluntarily exited the field (defence +1, raider OUT).
+  function handleBonusPlusSelfOut() {
+    if (!isLive) {
+      toast.error('Start the match first.');
+      return;
+    }
+    if (!raiderId) {
+      toast.error('Pick the raider first.');
+      return;
+    }
+    withSubmit(async () => {
+      const res = await recordBonusPlusSelfOutAction({
+        matchId,
+        attackingTeamId: attackingId,
+        raiderId,
+        half,
+        clockSeconds: clock,
+      });
+      if (!res?.error) {
+        clearSelections();
+        setRaidRunning(false);
+        setRaidLeft(0);
+        toast.success('Bonus + Self-out — attack +1, defence +1');
+      }
+      return res;
+    });
+  }
+
+  // Bonus + Defender self-out — raider crossed the bonus line (attack +1)
+  // AND one or more defenders voluntarily stepped off (attack +N more,
+  // defenders OUT, attackers revive). Single event covers the full raid.
+  function handleBonusPlusDefenderSelfOut() {
+    if (!isLive) {
+      toast.error('Start the match first.');
+      return;
+    }
+    if (touchedDefenderIds.length === 0) {
+      toast.error('Tap the defender(s) who stepped out first.');
+      return;
+    }
+    withSubmit(async () => {
+      const res = await recordBonusPlusDefenderSelfOutAction({
+        matchId,
+        attackingTeamId: attackingId,
+        raiderId,
+        defenderIds: touchedDefenderIds,
+        half,
+        clockSeconds: clock,
+      });
+      if (!res?.error) {
+        clearSelections();
+        setRaidRunning(false);
+        setRaidLeft(0);
+        toast.success(
+          `Bonus + Defender out — attack +${1 + touchedDefenderIds.length}`,
+        );
+      }
+      return res;
+    });
+  }
+
   // Bonus + Tackle — raider crossed the bonus line (attack +1) and was
   // then tackled before reaching mid-line (defence +1, raider OUT).
   // Single event so the raid is logged as one continuous play.
@@ -713,6 +796,12 @@ export function ScoringConsole({
   const superRaidEligible = touchedCount >= 3;
   const attacking = attackingId === home.id ? home : away;
   const defending = attackingId === home.id ? away : home;
+  // Do-or-die raid is "live" when the attacking team has 2 empty raids
+  // already. The next raid by that team must score; if it doesn't, the
+  // raider is OUT. We use this to flip the Empty button into a DoD raid.
+  const dodCounter =
+    attackingId === home.id ? initial.homeDodCounter : initial.awayDodCounter;
+  const isDodActive = dodCounter >= 2;
 
   // The raider currently in progress (raider picked + raid timer running).
   // Drives the "Raid in progress" banner here AND on the public live page.
@@ -1163,14 +1252,21 @@ export function ScoringConsole({
               </div>
             )}
 
-            {/* Action buttons row — single horizontal grid */}
-            <div className="grid shrink-0 grid-cols-4 gap-1.5 border-t border-border/50 pt-3 sm:grid-cols-9">
+            {/* Action buttons row — single horizontal grid.
+                "All out" is omitted: the DB trigger auto-fires it when a
+                team's on-mat reaches 0, awarding +2 to the other side.
+                Touch and T+B don't require defender selection — when none is
+                picked, the trigger auto-strikes the lowest-jersey defender.
+                Empty during a do-or-die raid is auto-routed to the
+                do_or_die_raid event type so the raider goes OUT properly. */}
+            <div className="grid shrink-0 grid-cols-4 gap-1.5 border-t border-border/50 pt-3 sm:grid-cols-10">
               <ActionBtn
                 icon={<Target />}
                 label="Touch"
                 sub={`+${Math.max(touchedCount, 1)}`}
                 onClick={() => {
-                  const points = touchedCount;
+                  // Default +1 (auto-strike #1 defender) when none selected.
+                  const points = Math.max(touchedCount, 1);
                   stageOrRun('Touch', `+${points}`, 'attack', () =>
                     record('raid_point', points, 0, {
                       includeRaider: true,
@@ -1178,13 +1274,13 @@ export function ScoringConsole({
                     }),
                   );
                 }}
-                disabled={!isLive || pending || !raiderId || touchedCount === 0}
+                disabled={!isLive || pending || !raiderId}
                 tone="attack"
                 title={
                   !raiderId
                     ? 'Pick the raider first'
                     : touchedCount === 0
-                      ? 'Tap the defender(s) the raider touched'
+                      ? 'Touch — no defender picked, the lowest-jersey defender on mat will be marked OUT (Attack +1).'
                       : `Touch — raider returned safely after touching ${touchedCount} defender(s). Attack +${touchedCount}.`
                 }
                 staged={pendingAction?.label === 'Touch'}
@@ -1212,7 +1308,8 @@ export function ScoringConsole({
                 label="T+B"
                 sub={`+${Math.max(touchedCount, 1) + 1}`}
                 onClick={() => {
-                  const points = touchedCount + 1;
+                  // Default +2 (auto-strike #1 defender + bonus) when none selected.
+                  const points = Math.max(touchedCount, 1) + 1;
                   stageOrRun('T+B', `+${points}`, 'attack', () =>
                     record('raid_point', points, 0, {
                       includeRaider: true,
@@ -1220,13 +1317,13 @@ export function ScoringConsole({
                     }),
                   );
                 }}
-                disabled={!isLive || pending || !raiderId || touchedCount === 0}
+                disabled={!isLive || pending || !raiderId}
                 tone="attack"
                 title={
                   !raiderId
                     ? 'Pick the raider first'
                     : touchedCount === 0
-                      ? 'Tap the defender(s) touched — T+B = touch(es) + bonus on the same raid'
+                      ? 'T+B — no defender picked, the lowest-jersey defender on mat will be marked OUT plus bonus (Attack +2).'
                       : `Touch + Bonus — ${touchedCount} touch(es) and bonus line crossed. Attack +${touchedCount + 1}.`
                 }
                 staged={pendingAction?.label === 'T+B'}
@@ -1256,34 +1353,39 @@ export function ScoringConsole({
                 staged={pendingAction?.label === 'Super'}
               />
               <ActionBtn
-                label="All out"
-                sub="+2"
+                label={isDodActive ? 'Empty (DoD)' : 'Empty'}
+                sub={isDodActive ? 'def +1' : '0'}
                 onClick={() =>
-                  stageOrRun('All out', '+2', 'attack', () =>
-                    record('all_out', 2, 0, { includeRaider: false }),
-                  )
-                }
-                disabled={!isLive || pending}
-                tone="attack"
-                title="All out — defending team has been wiped out. Attack +2; defenders all revive."
-                staged={pendingAction?.label === 'All out'}
-              />
-              <ActionBtn
-                label="Empty"
-                sub="0"
-                onClick={() =>
-                  stageOrRun('Empty', '0', 'neutral', () =>
-                    record('empty_raid', 0, 0, { includeRaider: true }),
+                  stageOrRun(
+                    isDodActive ? 'Empty (DoD)' : 'Empty',
+                    isDodActive ? 'def +1' : '0',
+                    isDodActive ? 'defend' : 'neutral',
+                    () =>
+                      // During an active do-or-die raid, an unsuccessful raid
+                      // means raider OUT and defence +1. Fire do_or_die_raid
+                      // with points_attacker=0 — the SQL trigger handles the
+                      // out + revival + counter reset.
+                      record(
+                        isDodActive ? 'do_or_die_raid' : 'empty_raid',
+                        0,
+                        isDodActive ? 1 : 0,
+                        { includeRaider: true },
+                      ),
                   )
                 }
                 disabled={!isLive || pending || !raiderId}
-                tone="neutral"
+                tone={isDodActive ? 'defend' : 'neutral'}
                 title={
                   !raiderId
-                    ? 'Pick the raider first — Empty raid: raider returned without a touch or bonus'
-                    : 'Empty raid — raider returned without scoring. Increments do-or-die counter.'
+                    ? 'Pick the raider first'
+                    : isDodActive
+                      ? 'Do-or-die failed — raider returned without scoring. Raider OUT, defence +1, counter resets.'
+                      : 'Empty raid — raider returned without scoring. Increments do-or-die counter.'
                 }
-                staged={pendingAction?.label === 'Empty'}
+                staged={
+                  pendingAction?.label === 'Empty' ||
+                  pendingAction?.label === 'Empty (DoD)'
+                }
               />
               <ActionBtn
                 icon={<Flame />}
@@ -1300,6 +1402,43 @@ export function ScoringConsole({
                     : 'Bonus + Tackle — raider got bonus then was tackled before mid-line. Attack +1, defence +1, raider OUT.'
                 }
                 staged={pendingAction?.label === 'B+T'}
+              />
+              <ActionBtn
+                icon={<Sparkles />}
+                label="B+SO"
+                sub="1|1"
+                onClick={() =>
+                  stageOrRun('B+SO', '1|1', 'neutral', handleBonusPlusSelfOut)
+                }
+                disabled={!isLive || pending || !raiderId}
+                tone="neutral"
+                title={
+                  !raiderId
+                    ? 'Pick the raider first — Bonus + Self-out: raider got bonus then voluntarily exited, attack +1, defence +1, raider OUT.'
+                    : 'Bonus + Self-out — raider got bonus then self-exited. Attack +1, defence +1, raider OUT.'
+                }
+                staged={pendingAction?.label === 'B+SO'}
+              />
+              <ActionBtn
+                icon={<Sparkles />}
+                label="B+DSO"
+                sub={`+${1 + touchedCount}|0`}
+                onClick={() =>
+                  stageOrRun(
+                    'B+DSO',
+                    `+${1 + touchedCount}`,
+                    'attack',
+                    handleBonusPlusDefenderSelfOut,
+                  )
+                }
+                disabled={!isLive || pending || touchedCount === 0}
+                tone="attack"
+                title={
+                  touchedCount === 0
+                    ? 'Bonus + Defender self-out — pick the defender(s) who stepped off. Raider got bonus AND defenders self-exited. Attack +(1+N).'
+                    : `Bonus + Defender self-out — bonus + ${touchedCount} defender(s) stepped off. Attack +${1 + touchedCount}.`
+                }
+                staged={pendingAction?.label === 'B+DSO'}
               />
               <ActionBtn
                 icon={<Shield />}
@@ -1640,7 +1779,8 @@ const PRIMARY_ACTION_DOCS: ActionDoc[] = [
     scoring: 'Attack +N',
     description:
       'Raider touched N defender(s) and returned safely. Each touched defender goes OUT; revivals = number touched.',
-    selection: 'Raider + 1+ defenders touched',
+    note: 'If no defender chip is selected, the lowest-jersey defender on mat is auto-marked OUT (Attack +1).',
+    selection: 'Raider (defenders optional — auto-strikes #1 if none picked)',
     tone: 'attack',
   },
   {
@@ -1657,7 +1797,8 @@ const PRIMARY_ACTION_DOCS: ActionDoc[] = [
     scoring: 'Attack +(N+1)',
     description:
       'Touch + Bonus on the same raid: N touches scored AND bonus line crossed. Touched defenders OUT.',
-    selection: 'Raider + 1+ defenders touched',
+    note: 'If no defender chip is selected, the lowest-jersey defender on mat is auto-marked OUT (Attack +2).',
+    selection: 'Raider (defenders optional — auto-strikes #1 if none picked)',
     tone: 'attack',
   },
   {
@@ -1670,18 +1811,11 @@ const PRIMARY_ACTION_DOCS: ActionDoc[] = [
     tone: 'attack',
   },
   {
-    label: 'All out',
-    scoring: 'Attack +2',
+    label: 'Empty / Empty (DoD)',
+    scoring: '0  /  Defence +1 (DoD)',
     description:
-      'Defending team has been wiped out. +2 awarded to attacking team; all defenders revived for the next raid.',
-    selection: 'None',
-    tone: 'attack',
-  },
-  {
-    label: 'Empty',
-    scoring: '0',
-    description:
-      'Empty raid — raider returned without touch or bonus. Increments do-or-die counter; the next raid for that team is do-or-die (raider must score or go OUT).',
+      'Empty raid — raider returned without touch or bonus. Increments do-or-die counter. After 2 consecutive empty raids, the third raid is automatically a Do-or-Die — clicking Empty then becomes "Empty (DoD)" and marks the raider OUT (defence +1).',
+    note: 'The button label and tone switch automatically when the DoD banner is showing.',
     selection: 'Raider',
     tone: 'neutral',
   },
@@ -1693,6 +1827,24 @@ const PRIMARY_ACTION_DOCS: ActionDoc[] = [
     note: 'Requires ≥6 defenders on mat (same rule as Bonus).',
     selection: 'Raider (defender chip optional, credits the tackle)',
     tone: 'neutral',
+  },
+  {
+    label: 'B+SO',
+    scoring: 'Attack +1 / Defence +1',
+    description:
+      'Bonus + Self-out: raider got bonus then voluntarily stepped off the mat. Raider OUT, defence revives 1.',
+    note: 'Requires ≥6 defenders on mat (same rule as Bonus).',
+    selection: 'Raider',
+    tone: 'neutral',
+  },
+  {
+    label: 'B+DSO',
+    scoring: 'Attack +(1+N)',
+    description:
+      'Bonus + Defender self-out: raider got bonus AND N defender(s) voluntarily stepped off. Defenders OUT, attackers revive N.',
+    note: 'Requires ≥6 defenders on mat at raid start (same rule as Bonus).',
+    selection: '1+ defenders (raider optional)',
+    tone: 'attack',
   },
   {
     label: 'Tackle',

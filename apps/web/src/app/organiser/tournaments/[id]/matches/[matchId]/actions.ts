@@ -475,6 +475,151 @@ export async function recordBonusPlusTackleAction(input: {
 }
 
 // ============================================================
+// Bonus + Raider self-out — raider crosses bonus line (attack +1) and
+// then voluntarily steps off the mat (defence +1, raider OUT, defender
+// revives). One tackle_point event with both point sides set; trigger
+// handles the out + revival. Bonus precondition (≥6 defenders on mat)
+// applies, same as B+T.
+// ============================================================
+export async function recordBonusPlusSelfOutAction(input: {
+  matchId: string;
+  attackingTeamId: string;
+  raiderId: string;
+  half: number;
+  clockSeconds: number;
+}) {
+  const user = await getSessionUser();
+  if (!user?.tenantId) return { error: 'Not authorised' };
+  if (!input.raiderId) return { error: 'Pick the raider first.' };
+
+  const supabase = await createClient();
+
+  const { data: m } = await supabase
+    .from('matches')
+    .select('home_team_id, away_team_id, scoring_version')
+    .eq('id', input.matchId)
+    .maybeSingle();
+
+  if (m && m.scoring_version === 2) {
+    const defendingTeamId =
+      m.home_team_id === input.attackingTeamId ? m.away_team_id : m.home_team_id;
+    const { count: defendersOnMat } = await supabase
+      .from('match_player_state')
+      .select('id', { count: 'exact', head: true })
+      .eq('match_id', input.matchId)
+      .eq('team_id', defendingTeamId)
+      .eq('state', 'on_mat');
+    if (defendersOnMat !== null && defendersOnMat < KABADDI_BONUS_MIN_DEFENDERS_FOR_COMBO) {
+      return {
+        error: `Bonus + Self-out requires ≥${KABADDI_BONUS_MIN_DEFENDERS_FOR_COMBO} defenders on mat (only ${defendersOnMat} present).`,
+      };
+    }
+  }
+
+  const { error } = await supabase.from('match_events').insert({
+    tenant_id: user.tenantId,
+    match_id: input.matchId,
+    type: 'tackle_point',
+    attacking_team_id: input.attackingTeamId,
+    points_attacker: 1, // bonus
+    points_defender: 1, // raider out
+    half: input.half,
+    clock_seconds: input.clockSeconds,
+    raider_id: input.raiderId,
+    defender_ids: null,
+    details: { reason: 'bonus_plus_self_out' },
+    created_by: user.id,
+  });
+  if (error) return { error: error.message };
+
+  await supabase
+    .from('matches')
+    .update({
+      clock_seconds: input.clockSeconds,
+      current_half: input.half,
+      current_raider_id: null,
+      current_attacking_team_id: null,
+    })
+    .eq('id', input.matchId);
+
+  return { ok: true };
+}
+
+// ============================================================
+// Bonus + Defender self-out(s) — raider crosses bonus line (attack +1)
+// AND one or more defenders voluntarily step off the mat
+// (attack +N, those defenders OUT, attackers revive N). Modeled as a
+// single raid_point with points_attacker = 1 (bonus) + N (defender outs)
+// so the existing trigger routes the outs + revivals correctly.
+// ============================================================
+export async function recordBonusPlusDefenderSelfOutAction(input: {
+  matchId: string;
+  attackingTeamId: string;
+  raiderId: string | null;
+  defenderIds: string[];
+  half: number;
+  clockSeconds: number;
+}) {
+  const user = await getSessionUser();
+  if (!user?.tenantId) return { error: 'Not authorised' };
+  if (input.defenderIds.length === 0) {
+    return { error: 'Pick at least one defender who stepped out.' };
+  }
+
+  const supabase = await createClient();
+
+  const { data: m } = await supabase
+    .from('matches')
+    .select('home_team_id, away_team_id, scoring_version')
+    .eq('id', input.matchId)
+    .maybeSingle();
+
+  if (m && m.scoring_version === 2) {
+    const defendingTeamId =
+      m.home_team_id === input.attackingTeamId ? m.away_team_id : m.home_team_id;
+    const { count: defendersOnMat } = await supabase
+      .from('match_player_state')
+      .select('id', { count: 'exact', head: true })
+      .eq('match_id', input.matchId)
+      .eq('team_id', defendingTeamId)
+      .eq('state', 'on_mat');
+    if (defendersOnMat !== null && defendersOnMat < KABADDI_BONUS_MIN_DEFENDERS_FOR_COMBO) {
+      return {
+        error: `Bonus + Defender out requires ≥${KABADDI_BONUS_MIN_DEFENDERS_FOR_COMBO} defenders on mat at raid start (only ${defendersOnMat} present).`,
+      };
+    }
+  }
+
+  const { error } = await supabase.from('match_events').insert({
+    tenant_id: user.tenantId,
+    match_id: input.matchId,
+    type: 'raid_point',
+    attacking_team_id: input.attackingTeamId,
+    points_attacker: 1 + input.defenderIds.length,
+    points_defender: 0,
+    half: input.half,
+    clock_seconds: input.clockSeconds,
+    raider_id: input.raiderId,
+    defender_ids: input.defenderIds,
+    details: { reason: 'bonus_plus_defender_self_out' },
+    created_by: user.id,
+  });
+  if (error) return { error: error.message };
+
+  await supabase
+    .from('matches')
+    .update({
+      clock_seconds: input.clockSeconds,
+      current_half: input.half,
+      current_raider_id: null,
+      current_attacking_team_id: null,
+    })
+    .eq('id', input.matchId);
+
+  return { ok: true };
+}
+
+// ============================================================
 // Review — operator reverses the most recent event for a team if the
 // review was upheld. The undo deletes the event; recompute is run via
 // the SQL function so player_state stays consistent.

@@ -34,8 +34,8 @@ export const KABADDI = {
   TIMEOUTS_PER_MATCH: 2,
   /** TV reviews per team per half. */
   REVIEWS_PER_HALF: 1,
-  /** Substitutions per team per half. */
-  SUBSTITUTIONS_PER_HALF: 5,
+  /** Substitutions per team per half. 0 = unlimited (no cap enforced). */
+  SUBSTITUTIONS_PER_HALF: 0,
   /** Minimum on-mat to claim bonus point. */
   BONUS_MIN_DEFENDERS: 6,
 } as const;
