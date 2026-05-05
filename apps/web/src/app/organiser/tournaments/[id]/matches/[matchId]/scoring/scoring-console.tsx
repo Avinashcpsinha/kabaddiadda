@@ -260,20 +260,22 @@ export function ScoringConsole({
       return next;
     });
   }
-  const [pendingAction, setPendingAction] = React.useState<
-    | {
-        label: string;
-        sub: string;
-        tone: 'attack' | 'defend' | 'neutral';
-        run: () => void;
-        /** Some actions inherently terminate the raid (Tackle, Empty,
-         *  Raider/Self out, Super). Get Points doesn't apply to them —
-         *  the banner only offers Complete Raid. Defaults to false so
-         *  Touch / Bonus / Defender-out can chain via Get Points. */
-        endsRaid: boolean;
-      }
-    | null
-  >(null);
+  // Queue of staged actions waiting for Get Points / Complete Raid.
+  // Each entry carries its own `run` closure that captured the picker
+  // selection at click time, so the operator can stack multiple
+  // actions (e.g. Touch + Bonus + Defender-out) before committing.
+  const [pendingActions, setPendingActions] = React.useState<
+    Array<{
+      label: string;
+      sub: string;
+      tone: 'attack' | 'defend' | 'neutral';
+      run: () => void;
+      /** Whether THIS action terminates the raid. Information-only
+       *  flag; the banner always offers both Get Points and Complete
+       *  Raid regardless. */
+      endsRaid: boolean;
+    }>
+  >([]);
   // Number of in-raid scoring events committed since the current raider
   // was picked. Drives the "30s auto-finish" empty-raid fallback and the
   // standalone Complete Raid button — if 0 when the raid ends, we fire
@@ -292,12 +294,10 @@ export function ScoringConsole({
   React.useEffect(() => {
     if (!raiderId) setActionsThisRaid(0);
   }, [raiderId]);
-  // Re-stage on selection change — the staged closure captured the touch count
-  // / raider at click time, so changing selections after staging would record
-  // stale values. Clearing the pending action forces the operator to re-stage.
-  React.useEffect(() => {
-    setPendingAction(null);
-  }, [raiderId, touchedDefenderIds, attackingId]);
+  // (No auto-cancel on selection change. Each queued action's run()
+  // closure captured the touchedCount / raiderId at click time, so
+  // changing selections after staging is safe — the next staged action
+  // gets its own fresh snapshot.)
   // Multi-action raid flow:
   //   • stageOrRun stages the action (Confirm-before-scoring on) or runs it
   //     immediately (toggle off). After running, we either keep the raider
@@ -310,6 +310,14 @@ export function ScoringConsole({
   //   • Standalone Complete Raid is always available once a raider has
   //     been picked. If no actions were committed during the raid, it
   //     fires an empty_raid event automatically; otherwise it just clears.
+  // Hand the next raid to the opposing team. Kabaddi alternates raids
+  // between the two teams — once the current raid resolves (Complete
+  // Raid, 30s auto-finish, or an immediate-mode endsRaid action), the
+  // attacking-team toggle flips automatically. Operator can still
+  // override the toggle manually if a wrong team was set.
+  function flipAttackingTeam() {
+    setAttackingId((prev) => (prev === home.id ? away.id : home.id));
+  }
   function stageOrRun(
     label: string,
     sub: string,
@@ -324,48 +332,62 @@ export function ScoringConsole({
         clearSelections();
         setRaidRunning(false);
         setRaidLeft(0);
+        flipAttackingTeam();
       } else {
         setTouchedDefenderIds([]);
       }
       return;
     }
-    setPendingAction({ label, sub, tone, run, endsRaid });
+    // Append to the queue. Each entry's run() closes over the current
+    // raider / defender / clock state, so it stays correct even if the
+    // operator changes the picker before committing.
+    setPendingActions((q) => [...q, { label, sub, tone, run, endsRaid }]);
   }
   function getPointsPending() {
-    const p = pendingAction;
-    if (!p) return;
-    setPendingAction(null);
-    p.run();
-    setActionsThisRaid((c) => c + 1);
-    // Raid continues — clear defenders only, keep the raider and the
-    // running raid timer in place.
+    if (pendingActions.length === 0) return;
+    const queue = pendingActions;
+    setPendingActions([]);
+    for (const p of queue) p.run();
+    setActionsThisRaid((c) => c + queue.length);
+    // Raid continues — clear defenders only so the next action starts
+    // with a fresh defender selection. Keep the raider + raid timer.
+    // No team flip — same raid, same attackers.
     setTouchedDefenderIds([]);
   }
   function completeRaidPending() {
-    const p = pendingAction;
-    setPendingAction(null);
-    if (p) {
-      p.run();
-      setActionsThisRaid((c) => c + 1);
-    }
-    // Raid ends regardless — clear everything and reset the raid timer.
+    const queue = pendingActions;
+    setPendingActions([]);
+    for (const p of queue) p.run();
+    if (queue.length > 0) setActionsThisRaid((c) => c + queue.length);
+    // Raid ends — clear picker, reset raid timer, hand next raid to
+    // the opposing team.
     clearSelections();
     setRaidRunning(false);
     setRaidLeft(0);
+    flipAttackingTeam();
+  }
+  function removePending(index: number) {
+    setPendingActions((q) => q.filter((_, i) => i !== index));
   }
   function cancelPending() {
-    setPendingAction(null);
+    // Cancel just discards the queue — no commit, no team flip.
+    setPendingActions([]);
   }
   // Operator-driven Complete Raid with no staged action. Used by both
   // the standalone button and the 30s auto-finish. Fires empty_raid only
   // if the current raid logged no committed actions yet.
   function completeRaidNow() {
+    // Only flip the attacking team if a raid actually happened — i.e.
+    // a raider was picked. Hitting Complete Raid before any selection
+    // (rare, but possible) shouldn't rotate the toggle.
+    const raidWasActive = !!raiderIdRef.current;
     if (raiderIdRef.current && actionsThisRaidRef.current === 0) {
       record('empty_raid', 0, 0, { includeRaider: true });
     }
     clearSelections();
     setRaidRunning(false);
     setRaidLeft(0);
+    if (raidWasActive) flipAttackingTeam();
   }
 
   const isLive = status === 'live';
@@ -447,6 +469,17 @@ export function ScoringConsole({
     setRaiderId(null);
     setTouchedDefenderIds([]);
   }, [attackingId]);
+
+  // Whenever the raider is cleared (manual Clear button, attacking-team
+  // flip, end-of-raid cleanup, etc.), the raid timer must reset too —
+  // otherwise it keeps ticking with no raider on the mat. The auto-start
+  // effect below re-arms the timer the next time a raider is picked.
+  React.useEffect(() => {
+    if (raiderId === null) {
+      setRaidRunning(false);
+      setRaidLeft(0);
+    }
+  }, [raiderId]);
 
   // Persist the current raider to the matches row whenever it changes, so a
   // browser refresh resumes with the same in-progress raid.
@@ -1173,7 +1206,7 @@ export function ScoringConsole({
                       cleanly. If no actions were committed, fires
                       empty_raid; otherwise just clears the picker + raid
                       timer so the next raid can start. */}
-                  {raiderId && !pendingAction && (
+                  {raiderId && pendingActions.length === 0 && (
                     <Button
                       size="sm"
                       variant="flame"
@@ -1252,51 +1285,82 @@ export function ScoringConsole({
               </div>
             </div>
 
-            {/* Pending action bar.
-                Two ways to commit:
-                  • Get Points  → records the action, picker keeps the
-                    raider, raid timer keeps running. Use when the raid
-                    isn't over yet (e.g. defender stepped off and the
-                    raider continues).
-                  • Complete Raid → records the action and ends the raid
-                    (clear raider, reset raid timer).
-                Get Points is hidden when the staged action inherently
-                ends the raid (Tackle / Empty / Super / Raider out / Self
-                out). 30s raid-timer expiry auto-fires Complete Raid. */}
-            {pendingAction && (
-              <div className="flex shrink-0 items-center gap-2 rounded-md border-2 border-amber-500 bg-amber-500/10 px-3 py-2 text-xs">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
-                <span className="text-muted-foreground">About to record:</span>
-                <span className="font-semibold text-foreground">
-                  {pendingAction.label} {pendingAction.sub}
-                </span>
-                <div className="ml-auto flex gap-1">
-                  {/* Get Points is always available — operator decides
-                      whether the raid continues. It's the primary CTA
-                      because most in-raid actions (touch / bonus /
-                      defender out) chain. Complete Raid is the
-                      explicit "raid ends" alternative. */}
-                  <Button
-                    size="sm"
-                    variant="flame"
-                    onClick={getPointsPending}
-                    disabled={pending}
-                    title="Record the action — raid continues, raider stays picked"
-                  >
-                    Get Points
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={completeRaidPending}
-                    disabled={pending}
-                    title="Record the action — raid ends, picker resets"
-                  >
-                    Complete Raid
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={cancelPending}>
-                    Cancel
-                  </Button>
+            {/* Queued actions banner.
+                Each click on an action button appends to the queue. The
+                operator can stack as many as they want (e.g. Touch +
+                Bonus + Defender-out) — each carries its own snapshot of
+                the picker selection. Two commit buttons fire all queued
+                actions in order:
+                  • Get Points  → commit, raid continues (raider stays,
+                    raid timer keeps ticking).
+                  • Complete Raid → commit, raid ends (picker + timer
+                    reset).
+                30s raid-timer expiry auto-fires Complete Raid. */}
+            {pendingActions.length > 0 && (
+              <div className="flex shrink-0 flex-col gap-2 rounded-md border-2 border-amber-500 bg-amber-500/10 px-3 py-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                  <span className="font-semibold text-foreground">
+                    {pendingActions.length} action
+                    {pendingActions.length === 1 ? '' : 's'} queued
+                  </span>
+                  <span className="text-muted-foreground">
+                    — Get Points keeps the raid going, Complete Raid
+                    ends it.
+                  </span>
+                  <div className="ml-auto flex gap-1">
+                    <Button
+                      size="sm"
+                      variant="flame"
+                      onClick={getPointsPending}
+                      disabled={pending}
+                      title="Commit the queue — raid continues, raider stays picked"
+                    >
+                      Get Points
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={completeRaidPending}
+                      disabled={pending}
+                      title="Commit the queue — raid ends, picker resets"
+                    >
+                      Complete Raid
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={cancelPending}>
+                      Cancel All
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {pendingActions.map((p, i) => (
+                    <span
+                      key={i}
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold',
+                        p.tone === 'attack'
+                          ? 'bg-primary/15 text-primary'
+                          : p.tone === 'defend'
+                            ? 'bg-sky-500/15 text-sky-500'
+                            : 'bg-foreground/10 text-foreground',
+                      )}
+                    >
+                      <span className="font-mono text-[10px] opacity-60">
+                        {i + 1}.
+                      </span>
+                      <span>{p.label}</span>
+                      <span className="font-mono opacity-80">{p.sub}</span>
+                      <button
+                        type="button"
+                        onClick={() => removePending(i)}
+                        className="ml-0.5 -mr-1 flex h-3.5 w-3.5 items-center justify-center rounded-sm hover:bg-foreground/10 hover:text-destructive"
+                        aria-label={`Remove ${p.label} from queue`}
+                        title="Remove from queue"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
                 </div>
               </div>
             )}
@@ -1336,7 +1400,7 @@ export function ScoringConsole({
                       ? 'Tap the defender(s) the raider touched'
                       : `Touch — raider can continue raiding after this; pick more defenders or click Complete Raid.`
                 }
-                staged={pendingAction?.label === 'Touch'}
+                staged={pendingActions.some((p) => p.label === 'Touch')}
               />
               <ActionBtn
                 icon={<Sparkles />}
@@ -1358,7 +1422,7 @@ export function ScoringConsole({
                     ? 'Pick the raider first — Bonus is awarded when the raider crosses the bonus line and returns'
                     : 'Bonus — attack +1, raider can continue raiding. Use Complete Raid when the raid ends.'
                 }
-                staged={pendingAction?.label === 'Bonus'}
+                staged={pendingActions.some((p) => p.label === 'Bonus')}
               />
               <ActionBtn
                 icon={<Sparkles />}
@@ -1387,7 +1451,7 @@ export function ScoringConsole({
                       ? 'Super Raid needs ≥3 defenders touched (or use T+B for 2 touches + bonus)'
                       : `Super Raid — ${touchedCount} defenders touched in one raid. Attack +${touchedCount}.`
                 }
-                staged={pendingAction?.label === 'Super'}
+                staged={pendingActions.some((p) => p.label === 'Super')}
               />
               <ActionBtn
                 label={isDodActive ? 'Empty (DoD)' : 'Empty'}
@@ -1420,10 +1484,9 @@ export function ScoringConsole({
                       ? 'Do-or-die failed — raider returned without scoring. Raider OUT, defence +1, counter resets.'
                       : 'Empty raid — raider returned without scoring. Increments do-or-die counter.'
                 }
-                staged={
-                  pendingAction?.label === 'Empty' ||
-                  pendingAction?.label === 'Empty (DoD)'
-                }
+                staged={pendingActions.some(
+                  (p) => p.label === 'Empty' || p.label === 'Empty (DoD)',
+                )}
               />
               <ActionBtn
                 icon={<Shield />}
@@ -1451,7 +1514,7 @@ export function ScoringConsole({
                       ? 'Tap the defender(s) who tackled the raider'
                       : 'Tackle — defenders tackled the raider. Defence +1, raider OUT.'
                 }
-                staged={pendingAction?.label === 'Tackle'}
+                staged={pendingActions.some((p) => p.label === 'Tackle')}
               />
               <ActionBtn
                 icon={<Shield />}
@@ -1487,7 +1550,7 @@ export function ScoringConsole({
                         ? `Super Tackle only counts when ≤${KABADDI.SUPER_TACKLE_DEFENDER_THRESHOLD} defenders are on mat (currently ${defendersOnMatCount})`
                         : 'Super Tackle — tackle made with ≤3 defenders on mat. Defence +2, raider OUT.'
                 }
-                staged={pendingAction?.label === 'S.tackle'}
+                staged={pendingActions.some((p) => p.label === 'S.tackle')}
               />
             </div>
 
@@ -1512,7 +1575,7 @@ export function ScoringConsole({
                     ? 'Pick the raider first — forced out (pushed out by defenders), defence +1, raider OUT'
                     : 'Raider out — forced out by defender pressure, defence +1, raider OUT'
                 }
-                staged={pendingAction?.label === 'Raider out'}
+                staged={pendingActions.some((p) => p.label === 'Raider out')}
               />
               <SmallActionBtn
                 icon={<LogOut className="h-3 w-3" />}
@@ -1533,7 +1596,7 @@ export function ScoringConsole({
                     ? 'Pick the raider first — self out (voluntary, no pressure), defence +1, raider OUT'
                     : 'Self out — raider voluntarily exited, defence +1, raider OUT'
                 }
-                staged={pendingAction?.label === 'Self out'}
+                staged={pendingActions.some((p) => p.label === 'Self out')}
               />
               <SmallActionBtn
                 icon={<LogOut className="h-3 w-3" />}
@@ -1561,7 +1624,7 @@ export function ScoringConsole({
                       ? 'Tap the defender(s) the raider pushed off the mat — attack +1 each'
                       : `Defender(s) forced out — attack +${touchedDefenderIds.length}`
                 }
-                staged={pendingAction?.label === 'Defender out'}
+                staged={pendingActions.some((p) => p.label === 'Defender out')}
               />
               <SmallActionBtn
                 icon={<LogOut className="h-3 w-3" />}
@@ -1582,7 +1645,7 @@ export function ScoringConsole({
                     ? 'Pick the defender(s) — self out (voluntary / tactical), attack +1 each'
                     : `Defender(s) self-out — attack +${touchedDefenderIds.length}`
                 }
-                staged={pendingAction?.label === 'Def. self'}
+                staged={pendingActions.some((p) => p.label === 'Def. self')}
               />
               <SmallActionBtn
                 icon={<ArrowRightLeft className="h-3 w-3" />}
