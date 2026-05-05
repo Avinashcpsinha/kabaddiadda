@@ -26,6 +26,43 @@ export type EventType =
 const KABADDI_BONUS_MIN_DEFENDERS = 6;
 const SUPER_TACKLE_THRESHOLD = 3;
 
+/**
+ * Reusable super-tackle auto-promotion check.
+ *
+ * The PKL rule: a tackle made when the defending side has ≤3 players on
+ * mat at the time of the tackle is a Super Tackle (+2 instead of +1).
+ *
+ * `defenderIdsBeingOuted` lets a combined event (e.g. one that also
+ * outs defender(s) in the same row) factor those outs into the
+ * "effective" count. For B+T / Raider-out (forced) the array is empty
+ * — those don't change the defender count themselves, they just react
+ * to it. SO+DSO is voluntary so it doesn't promote even though it does
+ * out a defender.
+ *
+ * Returns `{ promote, effectiveCount }`. Callers use `promote` to
+ * rewrite the inserted event to `super_tackle` (+2) and report it back
+ * via `promotedToSuperTackle: true` so the operator sees a toast.
+ */
+async function checkSuperTacklePromotion(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  matchId: string,
+  defendingTeamId: string,
+  defenderIdsBeingOuted: string[] = [],
+): Promise<{ promote: boolean; effectiveCount: number }> {
+  const { count } = await supabase
+    .from('match_player_state')
+    .select('id', { count: 'exact', head: true })
+    .eq('match_id', matchId)
+    .eq('team_id', defendingTeamId)
+    .eq('state', 'on_mat');
+  const current = count ?? 0;
+  const effective = Math.max(0, current - defenderIdsBeingOuted.length);
+  return {
+    promote: effective > 0 && effective <= SUPER_TACKLE_THRESHOLD,
+    effectiveCount: effective,
+  };
+}
+
 interface RecordEventInput {
   matchId: string;
   type: EventType;
@@ -313,17 +350,51 @@ export async function recordRaiderOutOfBoundsAction(input: {
   if (!user?.tenantId) return { error: 'Not authorised' };
 
   const supabase = await createClient();
+
+  // Forced-out (raider pushed out under defender pressure) is a defender
+  // achievement and follows the same super-tackle rule as a vanilla
+  // tackle — promote to +2 when the defending side is at ≤3 on mat.
+  // Self-out (voluntary) stays at +1 — there's no defender to credit.
+  const reason = input.reason ?? 'raider_out_of_bounds';
+  let effectiveType: 'tackle_point' | 'super_tackle' = 'tackle_point';
+  let effectivePointsDefender = 1;
+  let promotedToSuperTackle = false;
+
+  if (reason === 'raider_out_of_bounds') {
+    const { data: m } = await supabase
+      .from('matches')
+      .select('home_team_id, away_team_id, scoring_version')
+      .eq('id', input.matchId)
+      .maybeSingle();
+
+    if (m && m.scoring_version === 2) {
+      const defendingTeamId =
+        m.home_team_id === input.attackingTeamId ? m.away_team_id : m.home_team_id;
+      const { promote } = await checkSuperTacklePromotion(
+        supabase,
+        input.matchId,
+        defendingTeamId,
+      );
+      if (promote) {
+        effectiveType = 'super_tackle';
+        effectivePointsDefender = 2;
+        promotedToSuperTackle = true;
+      }
+    }
+  }
+
   const { error } = await supabase.from('match_events').insert({
     tenant_id: user.tenantId,
     match_id: input.matchId,
-    type: 'tackle_point',
+    type: effectiveType,
     attacking_team_id: input.attackingTeamId,
     points_attacker: 0,
-    points_defender: 1,
+    points_defender: effectivePointsDefender,
     half: input.half,
     clock_seconds: input.clockSeconds,
     raider_id: input.raiderId,
-    details: { reason: input.reason ?? 'raider_out_of_bounds' },
+    is_super_tackle: promotedToSuperTackle,
+    details: { reason },
     created_by: user.id,
   });
   if (error) return { error: error.message };
@@ -339,7 +410,7 @@ export async function recordRaiderOutOfBoundsAction(input: {
     })
     .eq('id', input.matchId);
 
-  return { ok: true };
+  return { ok: true, promotedToSuperTackle };
 }
 
 // ============================================================
@@ -428,6 +499,12 @@ export async function recordBonusPlusTackleAction(input: {
     .eq('id', input.matchId)
     .maybeSingle();
 
+  // Defender-count snapshot — drives both the bonus precondition AND
+  // the super-tackle auto-promotion below.
+  let promotedToSuperTackle = false;
+  let effectiveType: 'tackle_point' | 'super_tackle' = 'tackle_point';
+  let effectivePointsDefender = 1;
+
   if (m && m.scoring_version === 2) {
     const defendingTeamId =
       m.home_team_id === input.attackingTeamId ? m.away_team_id : m.home_team_id;
@@ -442,19 +519,29 @@ export async function recordBonusPlusTackleAction(input: {
         error: `Bonus + Tackle requires ≥${KABADDI_BONUS_MIN_DEFENDERS_FOR_COMBO} defenders on mat (only ${defendersOnMat} present).`,
       };
     }
+    // Auto-promote to super tackle when the defending side is short-handed.
+    // B+T's tackle component is a defender achievement, same eligibility
+    // rule as the standalone Tackle button.
+    const { promote } = await checkSuperTacklePromotion(supabase, input.matchId, defendingTeamId);
+    if (promote) {
+      effectiveType = 'super_tackle';
+      effectivePointsDefender = 2;
+      promotedToSuperTackle = true;
+    }
   }
 
   const { error } = await supabase.from('match_events').insert({
     tenant_id: user.tenantId,
     match_id: input.matchId,
-    type: 'tackle_point',
+    type: effectiveType,
     attacking_team_id: input.attackingTeamId,
     points_attacker: 1, // bonus
-    points_defender: 1, // tackle
+    points_defender: effectivePointsDefender, // 1 normally, 2 if super tackle
     half: input.half,
     clock_seconds: input.clockSeconds,
     raider_id: input.raiderId,
     defender_ids: input.defenderIds.length > 0 ? input.defenderIds : null,
+    is_super_tackle: promotedToSuperTackle,
     details: { reason: 'bonus_plus_tackle' },
     created_by: user.id,
   });
@@ -471,7 +558,7 @@ export async function recordBonusPlusTackleAction(input: {
     })
     .eq('id', input.matchId);
 
-  return { ok: true };
+  return { ok: true, promotedToSuperTackle };
 }
 
 // ============================================================

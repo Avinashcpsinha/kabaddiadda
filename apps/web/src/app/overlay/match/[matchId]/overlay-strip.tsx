@@ -323,6 +323,21 @@ export function OverlayStrip({
   const dodActive =
     (homeAttacking && homeDod >= 2) || (awayAttacking && awayDod >= 2);
   const isLive = status === 'live';
+  // Super Tackle Zone — defending side has dropped to <=3 on mat. Any
+  // tackle / forced raider-out in this state is auto-promoted to +2 by
+  // the server. Shown as an amber pulse badge so broadcast viewers see
+  // the moment the rule kicks in.
+  const homeOnMatCount = homeSlots.filter((s) => s.state === 'on_mat').length;
+  const awayOnMatCount = awaySlots.filter((s) => s.state === 'on_mat').length;
+  const defendingOnMatCount = homeAttacking
+    ? awayOnMatCount
+    : awayAttacking
+      ? homeOnMatCount
+      : null;
+  const superTackleZone =
+    defendingOnMatCount !== null &&
+    defendingOnMatCount > 0 &&
+    defendingOnMatCount <= 3;
 
   // Per-side bottom label.
   //   • While a raid is in progress: the attacking team shows the current
@@ -411,6 +426,9 @@ export function OverlayStrip({
 
         {/* CONTEXT BADGES — top-right corner */}
         <div className="absolute right-3 top-2 flex gap-1.5">
+          {superTackleZone && (
+            <ContextBadge tone="amber" label="Super Tackle" pulse />
+          )}
           {dodActive && <ContextBadge tone="rose" label="Do-or-die" pulse />}
           {allOutFlash && (
             <ContextBadge tone="emerald" label="All-out +2" pulse />
@@ -627,7 +645,7 @@ function ContextBadge({
   label,
   pulse,
 }: {
-  tone: 'orange' | 'rose' | 'emerald';
+  tone: 'orange' | 'rose' | 'emerald' | 'amber';
   label: string;
   pulse?: boolean;
 }) {
@@ -636,7 +654,9 @@ function ContextBadge({
       ? 'bg-orange-500/95 text-white'
       : tone === 'rose'
         ? 'bg-rose-500/95 text-white'
-        : 'bg-emerald-500/95 text-white';
+        : tone === 'amber'
+          ? 'bg-amber-500/95 text-zinc-950'
+          : 'bg-emerald-500/95 text-white';
   return (
     <div
       className={cn(

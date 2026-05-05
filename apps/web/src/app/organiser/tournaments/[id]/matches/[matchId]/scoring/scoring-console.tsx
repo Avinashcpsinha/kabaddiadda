@@ -23,6 +23,7 @@ import {
   Target,
   Timer,
   Trash2,
+  Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { KABADDI } from '@kabaddiadda/shared';
@@ -530,7 +531,13 @@ export function ScoringConsole({
         clearSelections();
         setRaidRunning(false);
         setRaidLeft(0);
-        toast.success('Raider out — defence +1');
+        if (res?.promotedToSuperTackle) {
+          toast.success(
+            '⚡ Super Tackle — defenders ≤3, raider forced out promoted to +2',
+          );
+        } else {
+          toast.success('Raider out — defence +1');
+        }
       }
       return res;
     });
@@ -756,7 +763,13 @@ export function ScoringConsole({
         clearSelections();
         setRaidRunning(false);
         setRaidLeft(0);
-        toast.success('Bonus + Tackle — attack +1, defence +1');
+        if (res?.promotedToSuperTackle) {
+          toast.success(
+            '⚡ Super Tackle — defenders ≤3, B+T promoted to attack +1, defence +2',
+          );
+        } else {
+          toast.success('Bonus + Tackle — attack +1, defence +1');
+        }
       }
       return res;
     });
@@ -965,6 +978,11 @@ export function ScoringConsole({
         // Raid is over — reset the raid timer so the next raider auto-starts fresh.
         setRaidRunning(false);
         setRaidLeft(0);
+        // Surface the auto-promotion when a Tackle silently became a Super
+        // Tackle because the defending side was at <=3 on mat.
+        if (res && 'promotedToSuperTackle' in res && res.promotedToSuperTackle) {
+          toast.success('⚡ Super Tackle — defenders ≤3, promoted to +2');
+        }
         // Re-fetch server data (events, player_state, score) WITHOUT a full
         // page reload — preserves the client clock + running state so the
         // global timer keeps ticking right where it was.
@@ -1224,6 +1242,20 @@ export function ScoringConsole({
                 </div>
               );
             })()}
+
+            {/* Super Tackle Zone banner — auto-shows whenever the defending
+                team has dropped to <=3 on mat. Any tackle / forced raider-out
+                in this state auto-promotes to +2 (server-side promotion in
+                recordMatchEventAction / B+T / Raider-out actions). */}
+            {isLive && superTackleEligible && (
+              <div className="flex shrink-0 items-center gap-2 rounded-md border border-amber-500/60 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                <Zap className="h-4 w-4 shrink-0 animate-pulse" />
+                <span className="font-bold uppercase tracking-wider">Super Tackle Zone</span>
+                <span className="text-muted-foreground">
+                  {defending.name} have {defendersOnMatCount} on mat — any tackle or forced raider-out scores +2 instead of +1.
+                </span>
+              </div>
+            )}
 
             {/* Raid-in-progress banner — visible the moment a raider is picked */}
             {currentRaider && (
