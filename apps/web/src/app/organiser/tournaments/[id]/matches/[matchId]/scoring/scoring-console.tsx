@@ -1109,7 +1109,7 @@ export function ScoringConsole({
     <div className="flex min-h-[640px] flex-col gap-3">
       {/* HEADER BAR — score, clocks, match controls in a single tight row */}
       <Card className="shrink-0 overflow-hidden">
-        <CardContent className="grid grid-cols-1 items-center gap-4 p-4 lg:grid-cols-[1fr_auto_1fr]">
+        <CardContent className="grid grid-cols-1 items-center gap-4 p-4 md:grid-cols-[1fr_auto_1fr]">
           <div className="flex items-center gap-2">
             <CompactTeamScore
               team={home}
@@ -1505,8 +1505,11 @@ export function ScoringConsole({
                 Touch and T+B don't require defender selection — when none is
                 picked, the trigger auto-strikes the lowest-jersey defender.
                 Empty during a do-or-die raid is auto-routed to the
-                do_or_die_raid event type so the raider goes OUT properly. */}
-            <div className="grid shrink-0 grid-cols-3 gap-1.5 border-t border-border/50 pt-3">
+                do_or_die_raid event type so the raider goes OUT properly.
+                3 cols on phone (full-width card), 6 cols on tablet (still
+                full-width, more breathing room), 3 cols on desktop where
+                this card is in the 320px right column. */}
+            <div className="grid shrink-0 grid-cols-3 gap-1.5 border-t border-border/50 pt-3 md:grid-cols-6 lg:grid-cols-3">
               <ActionBtn
                 icon={<Target />}
                 label="Touch"
@@ -1688,8 +1691,10 @@ export function ScoringConsole({
               />
             </div>
 
-            {/* SECONDARY ACTIONS — outs (forced + self), referee, cards, sub, review */}
-            <div className="grid shrink-0 grid-cols-3 gap-1.5 border-t border-border/50 pt-3">
+            {/* SECONDARY ACTIONS — outs (forced + self), referee, cards, sub, review.
+                3 cols on phone, 5 cols on tablet (2 rows of 5), 3 cols on
+                desktop's narrow right column. */}
+            <div className="grid shrink-0 grid-cols-3 gap-1.5 border-t border-border/50 pt-3 md:grid-cols-5 lg:grid-cols-3">
               <SmallActionBtn
                 icon={<LogOut className="h-3 w-3" />}
                 label="Raider out"
