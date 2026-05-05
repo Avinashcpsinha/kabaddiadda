@@ -395,6 +395,11 @@ export function ScoringConsole({
       endsRaid: boolean;
     }>
   >([]);
+  // Whether the queue popup is currently visible. Opens automatically
+  // when an action is staged; user can dismiss it (with "Add more
+  // actions" or backdrop click) to keep stacking actions, and reopen
+  // it via the floating "Queue (n)" pill. Commit / cancel close it.
+  const [queueModalOpen, setQueueModalOpen] = React.useState(false);
   // Number of in-raid scoring events committed since the current raider
   // was picked. Drives the "30s auto-finish" empty-raid fallback and the
   // standalone Complete Raid button — if 0 when the raid ends, we fire
@@ -459,13 +464,16 @@ export function ScoringConsole({
     }
     // Append to the queue. Each entry's run() closes over the current
     // raider / defender / clock state, so it stays correct even if the
-    // operator changes the picker before committing.
+    // operator changes the picker before committing. Opens the popup
+    // so the operator sees the running queue + commit buttons.
     setPendingActions((q) => [...q, { label, sub, tone, run, endsRaid }]);
+    setQueueModalOpen(true);
   }
   function getPointsPending() {
     if (pendingActions.length === 0) return;
     const queue = pendingActions;
     setPendingActions([]);
+    setQueueModalOpen(false);
     for (const p of queue) p.run();
     setActionsThisRaid((c) => c + queue.length);
     // Raid continues — clear defenders only so the next action starts
@@ -476,6 +484,7 @@ export function ScoringConsole({
   function completeRaidPending() {
     const queue = pendingActions;
     setPendingActions([]);
+    setQueueModalOpen(false);
     for (const p of queue) p.run();
     if (queue.length > 0) setActionsThisRaid((c) => c + queue.length);
     // Raid ends — clear picker, reset raid timer, hand next raid to
@@ -486,11 +495,17 @@ export function ScoringConsole({
     flipAttackingTeam();
   }
   function removePending(index: number) {
-    setPendingActions((q) => q.filter((_, i) => i !== index));
+    setPendingActions((q) => {
+      const next = q.filter((_, i) => i !== index);
+      // If we removed the last one, close the modal too.
+      if (next.length === 0) setQueueModalOpen(false);
+      return next;
+    });
   }
   function cancelPending() {
     // Cancel just discards the queue — no commit, no team flip.
     setPendingActions([]);
+    setQueueModalOpen(false);
   }
   // Operator-driven Complete Raid with no staged action. Used by both
   // the standalone button and the 30s auto-finish. Fires empty_raid only
@@ -1419,84 +1434,24 @@ export function ScoringConsole({
             without scrolling past the picker on tall screens. */}
         <Card className="flex flex-col overflow-hidden">
           <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-4">
-            {/* Queued actions banner.
-                Each click on an action button appends to the queue. The
-                operator can stack as many as they want (e.g. Touch +
-                Bonus + Defender-out) — each carries its own snapshot of
-                the picker selection. Two commit buttons fire all queued
-                actions in order:
-                  • Get Points  → commit, raid continues (raider stays,
-                    raid timer keeps ticking).
-                  • Complete Raid → commit, raid ends (picker + timer
-                    reset).
-                30s raid-timer expiry auto-fires Complete Raid. */}
-            {pendingActions.length > 0 && (
-              <div className="flex shrink-0 flex-col gap-2 rounded-md border-2 border-amber-500 bg-amber-500/10 px-3 py-2 text-xs">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
-                  <span className="font-semibold text-foreground">
-                    {pendingActions.length} action
-                    {pendingActions.length === 1 ? '' : 's'} queued
-                  </span>
-                  <span className="text-muted-foreground">
-                    — Get Points keeps the raid going, Complete Raid
-                    ends it.
-                  </span>
-                  <div className="ml-auto flex gap-1">
-                    <Button
-                      size="sm"
-                      variant="flame"
-                      onClick={getPointsPending}
-                      disabled={pending}
-                      title="Commit the queue — raid continues, raider stays picked"
-                    >
-                      Get Points
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={completeRaidPending}
-                      disabled={pending}
-                      title="Commit the queue — raid ends, picker resets"
-                    >
-                      Complete Raid
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={cancelPending}>
-                      Cancel All
-                    </Button>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {pendingActions.map((p, i) => (
-                    <span
-                      key={i}
-                      className={cn(
-                        'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold',
-                        p.tone === 'attack'
-                          ? 'bg-primary/15 text-primary'
-                          : p.tone === 'defend'
-                            ? 'bg-sky-500/15 text-sky-500'
-                            : 'bg-foreground/10 text-foreground',
-                      )}
-                    >
-                      <span className="font-mono text-[10px] opacity-60">
-                        {i + 1}.
-                      </span>
-                      <span>{p.label}</span>
-                      <span className="font-mono opacity-80">{p.sub}</span>
-                      <button
-                        type="button"
-                        onClick={() => removePending(i)}
-                        className="ml-0.5 -mr-1 flex h-3.5 w-3.5 items-center justify-center rounded-sm hover:bg-foreground/10 hover:text-destructive"
-                        aria-label={`Remove ${p.label} from queue`}
-                        title="Remove from queue"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              </div>
+            {/* Queue is shown in a centered popup (rendered at root of
+                the component, see QueueModal below) so the cramped
+                right-column inline banner doesn't squash the buttons.
+                When the popup is dismissed (Add more actions / backdrop
+                click), this small pill stays so the operator can
+                reopen the popup to commit. */}
+            {pendingActions.length > 0 && !queueModalOpen && (
+              <button
+                type="button"
+                onClick={() => setQueueModalOpen(true)}
+                className="flex shrink-0 items-center gap-2 rounded-md border-2 border-amber-500 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-500/20 dark:text-amber-400"
+              >
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>
+                  {pendingActions.length} action
+                  {pendingActions.length === 1 ? '' : 's'} queued — tap to commit
+                </span>
+              </button>
             )}
 
             {/* Action buttons row — single horizontal grid.
@@ -1974,6 +1929,89 @@ export function ScoringConsole({
           widthClass="max-w-3xl"
         >
           <ActionReference />
+        </Modal>
+      )}
+
+      {/* Queued actions popup — appears when an action is staged.
+          Operator can dismiss it (Add more actions / backdrop click) to
+          stack additional actions, then reopen via the small "Queue (n)"
+          pill in the actions card. Get Points commits + keeps the raid
+          alive; Complete Raid commits + ends the raid. */}
+      {queueModalOpen && pendingActions.length > 0 && (
+        <Modal
+          onClose={() => setQueueModalOpen(false)}
+          title={`${pendingActions.length} action${pendingActions.length === 1 ? '' : 's'} queued`}
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-muted-foreground">
+              <strong className="text-foreground">Get Points</strong> commits the queue and the raid continues (raider stays).{' '}
+              <strong className="text-foreground">Complete Raid</strong> commits and ends the raid (picker resets, other team raids next).
+            </p>
+            <div className="flex flex-wrap gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
+              {pendingActions.map((p, i) => (
+                <span
+                  key={i}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold',
+                    p.tone === 'attack'
+                      ? 'bg-primary/15 text-primary'
+                      : p.tone === 'defend'
+                        ? 'bg-sky-500/15 text-sky-500'
+                        : 'bg-foreground/10 text-foreground',
+                  )}
+                >
+                  <span className="font-mono text-[10px] opacity-60">{i + 1}.</span>
+                  <span>{p.label}</span>
+                  <span className="font-mono opacity-80">{p.sub}</span>
+                  <button
+                    type="button"
+                    onClick={() => removePending(i)}
+                    className="-mr-1 ml-0.5 flex h-4 w-4 items-center justify-center rounded-sm hover:bg-foreground/10 hover:text-destructive"
+                    aria-label={`Remove ${p.label} from queue`}
+                    title="Remove from queue"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={cancelPending}
+                className="text-destructive hover:text-destructive"
+              >
+                Cancel All
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setQueueModalOpen(false)}
+                title="Close — queue is preserved so you can stack more actions"
+              >
+                Add more actions
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={completeRaidPending}
+                disabled={pending}
+                title="Commit the queue — raid ends, picker resets, other team raids next"
+              >
+                Complete Raid
+              </Button>
+              <Button
+                variant="flame"
+                size="sm"
+                onClick={getPointsPending}
+                disabled={pending}
+                title="Commit the queue — raid continues, raider stays picked"
+              >
+                Get Points
+              </Button>
+            </div>
+          </div>
         </Modal>
       )}
     </div>
