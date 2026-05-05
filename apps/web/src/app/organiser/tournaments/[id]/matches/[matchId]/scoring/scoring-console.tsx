@@ -521,8 +521,11 @@ export function ScoringConsole({
   // Coupled to the global clock: it only ticks when BOTH the raid is running
   // AND the global match clock is running. Pausing the global automatically
   // pauses the raid; resuming the global resumes a still-active raid.
+  // Also requires a raider to be picked — without a raider on the mat there's
+  // no raid to time, so the interval no-ops even if raidRunning is somehow
+  // still true.
   React.useEffect(() => {
-    if (!raidRunning || !running) return;
+    if (!raidRunning || !running || !raiderId) return;
     const t = setInterval(() => {
       setRaidLeft((prev) => {
         const next = prev - 1;
@@ -546,11 +549,15 @@ export function ScoringConsole({
       });
     }, 1000);
     return () => clearInterval(t);
-  }, [raidRunning, running]);
+  }, [raidRunning, running, raiderId]);
 
   function startRaid() {
     if (!isLive) {
       toast.error('Start the match first.');
+      return;
+    }
+    if (!raiderId) {
+      toast.error('Pick a raider first — the raid timer needs a raider.');
       return;
     }
     primeAudio();
@@ -564,6 +571,10 @@ export function ScoringConsole({
 
   function resumeRaid() {
     if (raidLeft <= 0) return;
+    if (!raiderId) {
+      toast.error('Pick a raider first — the raid timer needs a raider.');
+      return;
+    }
     primeAudio();
     setRaidRunning(true);
   }
@@ -1088,7 +1099,7 @@ export function ScoringConsole({
   );
 
   return (
-    <div className="flex min-h-[640px] flex-col gap-3 lg:h-[calc(100vh-12rem)]">
+    <div className="flex min-h-[640px] flex-col gap-3">
       {/* HEADER BAR — score, clocks, match controls in a single tight row */}
       <Card className="shrink-0 overflow-hidden">
         <CardContent className="grid grid-cols-1 items-center gap-4 p-4 lg:grid-cols-[1fr_auto_1fr]">
@@ -1106,15 +1117,18 @@ export function ScoringConsole({
             />
           </div>
 
-          {/* Center: countdown + raid timer + match controls */}
-          <div className="flex flex-wrap items-center justify-center gap-4">
-            <div className="text-center">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                Q{half} · {Math.floor(HALF_SECONDS / 60)} min half
-              </div>
-              <div
+          {/* Centre — flattened into a single horizontal row so the
+              clock / raid timer / match controls all line up on the
+              same baseline as the team scores on either side. */}
+          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+            {/* Match clock + status */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                Q{half}
+              </span>
+              <span
                 className={cn(
-                  'font-mono text-3xl font-bold tabular-nums',
+                  'font-mono text-3xl font-bold leading-none tabular-nums',
                   remaining <= 60 && remaining > 0 && 'text-amber-500',
                   remaining === 0 && 'text-destructive',
                 )}
@@ -1123,63 +1137,75 @@ export function ScoringConsole({
                   .toString()
                   .padStart(2, '0')}
                 :{(remaining % 60).toString().padStart(2, '0')}
-              </div>
+              </span>
               <StatusPill status={status} />
             </div>
 
-            <div className="flex flex-col items-center gap-1">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                <Timer className="inline h-3 w-3" /> raid
-              </div>
-              <div className={raidRingClass} aria-label={`Raid timer: ${raidLeft}s`}>
+            {/* Raid timer */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                <Timer className="mr-0.5 inline h-3 w-3" />
+                Raid
+              </span>
+              <div
+                className={cn(raidRingClass, 'h-9 w-9 text-base')}
+                aria-label={`Raid timer: ${raidLeft}s`}
+              >
                 {raidLeft.toString().padStart(2, '0')}
               </div>
-              <div className="flex gap-1">
-                {raidRunning ? (
-                  <button
-                    type="button"
-                    onClick={pauseRaid}
-                    className="rounded border border-border bg-card px-2 py-0.5 text-[10px] hover:bg-accent/30"
-                  >
-                    Pause
-                  </button>
-                ) : raidLeft > 0 ? (
-                  <button
-                    type="button"
-                    onClick={resumeRaid}
-                    className="rounded border border-primary bg-primary/10 px-2 py-0.5 text-[10px] text-primary"
-                  >
-                    Resume
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={startRaid}
-                    disabled={!isLive}
-                    className="rounded border border-primary bg-primary/10 px-2 py-0.5 text-[10px] text-primary disabled:opacity-50"
-                  >
-                    Start
-                  </button>
-                )}
+              {raidRunning ? (
                 <button
                   type="button"
-                  onClick={resetRaid}
-                  disabled={!raidRunning && raidLeft === 0}
-                  className="rounded border border-border bg-card px-2 py-0.5 text-[10px] hover:bg-accent/30 disabled:opacity-40"
-                  aria-label="Reset raid timer"
+                  onClick={pauseRaid}
+                  className="rounded border border-border bg-card px-2 py-1 text-[10px] hover:bg-accent/30"
                 >
-                  <RotateCcw className="inline h-3 w-3" />
+                  Pause
                 </button>
-              </div>
+              ) : raidLeft > 0 ? (
+                <button
+                  type="button"
+                  onClick={resumeRaid}
+                  disabled={!raiderId}
+                  title={
+                    !raiderId
+                      ? 'Pick a raider first to resume the raid timer'
+                      : 'Resume the raid timer'
+                  }
+                  className="rounded border border-primary bg-primary/10 px-2 py-1 text-[10px] text-primary disabled:opacity-50"
+                >
+                  Resume
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={startRaid}
+                  disabled={!isLive || !raiderId}
+                  title={
+                    !raiderId
+                      ? 'Pick a raider first to start the raid timer'
+                      : 'Start the 30-second raid timer'
+                  }
+                  className="rounded border border-primary bg-primary/10 px-2 py-1 text-[10px] text-primary disabled:opacity-50"
+                >
+                  Start
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={resetRaid}
+                disabled={!raidRunning && raidLeft === 0}
+                className="rounded border border-border bg-card p-1 hover:bg-accent/30 disabled:opacity-40"
+                aria-label="Reset raid timer"
+              >
+                <RotateCcw className="h-3 w-3" />
+              </button>
             </div>
 
-            {/* Match controls — single horizontal row beside the clock so all
-                three buttons sit on the same line as the timers instead of
-                tower-stacking under the Resume button. */}
+            {/* Match controls */}
             <div className="flex items-center gap-1">
               {status === 'scheduled' && (
-                <Button onClick={startMatch} variant="flame">
-                  <Play className="h-4 w-4" />
+                <Button onClick={startMatch} variant="flame" size="sm">
+                  <Play className="h-3 w-3" />
                   Start match
                 </Button>
               )}
@@ -1210,8 +1236,8 @@ export function ScoringConsole({
                 </>
               )}
               {status === 'half_time' && (
-                <Button onClick={nextHalf} variant="flame">
-                  <Play className="h-4 w-4" />
+                <Button onClick={nextHalf} variant="flame" size="sm">
+                  <Play className="h-3 w-3" />
                   Start Q{half + 1}
                 </Button>
               )}
@@ -1219,7 +1245,7 @@ export function ScoringConsole({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2">
             <ScoreAdjustControl
               onPlus={() => handleScoreAdjust(away.id, 1)}
               onMinus={() => handleScoreAdjust(away.id, -1)}
@@ -1235,9 +1261,12 @@ export function ScoringConsole({
         </CardContent>
       </Card>
 
-      {/* MAIN AREA — pickers + actions on the left, event log on the right */}
+      {/* MAIN AREA — top row: pickers (left) + actions (right).
+          Event log moves to a full-width row below so it doesn't
+          fight the action grid for vertical space. */}
       <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[1fr_320px]">
-        {/* LEFT — toggle, pickers, action buttons in one card */}
+        {/* LEFT (lg+) — toggle, banners, pickers. Action buttons split
+            out into the right-hand Actions card below. */}
         <Card className="flex flex-col overflow-hidden">
           <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-4">
             {/* Currently raiding toggle */}
@@ -1412,7 +1441,15 @@ export function ScoringConsole({
                 </PickerColumn>
               </div>
             </div>
+          </CardContent>
+        </Card>
 
+        {/* RIGHT (lg+) — Actions card. Queue banner + primary &
+            secondary action grids + help link. Split out from the
+            picker card so the operator's eye can settle on actions
+            without scrolling past the picker on tall screens. */}
+        <Card className="flex flex-col overflow-hidden">
+          <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-4">
             {/* Queued actions banner.
                 Each click on an action button appends to the queue. The
                 operator can stack as many as they want (e.g. Touch +
@@ -1500,7 +1537,7 @@ export function ScoringConsole({
                 picked, the trigger auto-strikes the lowest-jersey defender.
                 Empty during a do-or-die raid is auto-routed to the
                 do_or_die_raid event type so the raider goes OUT properly. */}
-            <div className="grid shrink-0 grid-cols-4 gap-1.5 border-t border-border/50 pt-3 sm:grid-cols-6">
+            <div className="grid shrink-0 grid-cols-3 gap-1.5 border-t border-border/50 pt-3">
               <ActionBtn
                 icon={<Target />}
                 label="Touch"
@@ -1683,7 +1720,7 @@ export function ScoringConsole({
             </div>
 
             {/* SECONDARY ACTIONS — outs (forced + self), referee, cards, sub, review */}
-            <div className="grid shrink-0 grid-cols-4 gap-1.5 border-t border-border/50 pt-3 sm:grid-cols-10">
+            <div className="grid shrink-0 grid-cols-3 gap-1.5 border-t border-border/50 pt-3">
               <SmallActionBtn
                 icon={<LogOut className="h-3 w-3" />}
                 label="Raider out"
@@ -1856,9 +1893,12 @@ export function ScoringConsole({
             </div>
           </CardContent>
         </Card>
+      </div>
 
-        {/* RIGHT — event log (scrolls internally) */}
-        <Card className="flex flex-col overflow-hidden">
+      {/* BOTTOM ROW — Event log spans full width below the
+          pickers + actions grid. Caps height with max-h so the log
+          doesn't push the action grid off-screen on tall viewports. */}
+      <Card className="flex shrink-0 flex-col overflow-hidden lg:max-h-[260px]">
           <CardContent className="flex min-h-0 flex-1 flex-col p-4">
             <div className="mb-2 flex shrink-0 items-center justify-between">
               <h3 className="text-xs font-semibold uppercase tracking-wider">Event log</h3>
@@ -1919,7 +1959,6 @@ export function ScoringConsole({
             )}
           </CardContent>
         </Card>
-      </div>
 
       {/* MODALS — cards, substitution, review */}
       {openModal?.kind === 'card' && (
@@ -2573,7 +2612,7 @@ function PickerColumn({
       </div>
       {/* 2-col grid; on short viewports the column scrolls internally so chips
           never spill over the action-buttons row below. */}
-      <div className="relative grid min-h-0 flex-1 grid-cols-2 content-start gap-1 overflow-y-auto pr-1">
+      <div className="relative grid grid-cols-2 content-start gap-1">
         {children}
       </div>
     </div>
