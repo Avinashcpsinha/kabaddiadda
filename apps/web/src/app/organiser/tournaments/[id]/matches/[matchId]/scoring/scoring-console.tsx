@@ -54,6 +54,7 @@ import {
   recordMatchEventAction,
   recordDefenderOutOfBoundsAction,
   recordRaiderOutOfBoundsAction,
+  recordRaiderSelfOutPlusDefenderSelfOutAction,
   recordSubstitutionAction,
   recordTechPointAction,
   recordTouchPlusDefenderSelfOutAction,
@@ -650,6 +651,43 @@ export function ScoringConsole({
         setRaidLeft(0);
         toast.success(
           `Bonus + Defender out — attack +${1 + touchedDefenderIds.length}`,
+        );
+      }
+      return res;
+    });
+  }
+
+  // Raider self-out + Defender self-out — both the raider AND one or
+  // more defenders voluntarily exit in the same raid. Single event;
+  // FIFO revivals only fire if either team had pre-existing outs.
+  function handleRaiderSelfOutPlusDefenderSelfOut() {
+    if (!isLive) {
+      toast.error('Start the match first.');
+      return;
+    }
+    if (!raiderId) {
+      toast.error('Pick the raider first.');
+      return;
+    }
+    if (touchedDefenderIds.length === 0) {
+      toast.error('Pick the defender(s) who stepped out first.');
+      return;
+    }
+    withSubmit(async () => {
+      const res = await recordRaiderSelfOutPlusDefenderSelfOutAction({
+        matchId,
+        attackingTeamId: attackingId,
+        raiderId,
+        defenderIds: touchedDefenderIds,
+        half,
+        clockSeconds: clock,
+      });
+      if (!res?.error) {
+        clearSelections();
+        setRaidRunning(false);
+        setRaidLeft(0);
+        toast.success(
+          `Raider + Def self-out — attack +${touchedDefenderIds.length}, defence +1`,
         );
       }
       return res;
@@ -1556,8 +1594,8 @@ export function ScoringConsole({
               />
             </div>
 
-            {/* SECONDARY ACTIONS — outs (forced + self), referee, cards, sub, review */}
-            <div className="grid shrink-0 grid-cols-4 gap-1.5 border-t border-border/50 pt-3 sm:grid-cols-10">
+            {/* SECONDARY ACTIONS — outs (forced + self + combined), referee, cards, sub, review */}
+            <div className="grid shrink-0 grid-cols-4 gap-1.5 border-t border-border/50 pt-3 sm:grid-cols-11">
               <SmallActionBtn
                 icon={<LogOut className="h-3 w-3" />}
                 label="Raider out"
@@ -1587,6 +1625,33 @@ export function ScoringConsole({
                     : 'Self out — raider voluntarily exited, defence +1, raider OUT'
                 }
                 staged={pendingAction?.label === 'Self out'}
+              />
+              <SmallActionBtn
+                icon={<LogOut className="h-3 w-3" />}
+                label="SO+DSO"
+                onClick={() =>
+                  stageOrRun(
+                    'SO+DSO',
+                    `+${touchedDefenderIds.length}|+1`,
+                    'neutral',
+                    handleRaiderSelfOutPlusDefenderSelfOut,
+                  )
+                }
+                disabled={
+                  !isLive ||
+                  pending ||
+                  !raiderId ||
+                  touchedDefenderIds.length === 0
+                }
+                tone="neutral"
+                title={
+                  !raiderId
+                    ? 'Pick the raider AND the defender(s) who stepped out — both teams score (attack +N, defence +1)'
+                    : touchedDefenderIds.length === 0
+                      ? 'Pick the defender(s) who stepped out — combined Raider self-out + Defender self-out, both teams score'
+                      : `Raider + Def self-out — attack +${touchedDefenderIds.length}, defence +1. Revivals only if either team had prior outs.`
+                }
+                staged={pendingAction?.label === 'SO+DSO'}
               />
               <SmallActionBtn
                 icon={<LogOut className="h-3 w-3" />}
@@ -1955,6 +2020,15 @@ const SECONDARY_ACTION_DOCS: ActionDoc[] = [
       'Raider voluntarily exited the field without defender pressure (e.g., gave up the raid). Same scoring as Raider out; tagged separately for stats.',
     selection: 'Raider',
     tone: 'defend',
+  },
+  {
+    label: 'SO+DSO',
+    scoring: 'Attack +N / Defence +1',
+    description:
+      'Raider self-out + Defender self-out in the same raid: both raider AND one or more defenders voluntarily exit. Each picked defender goes OUT, raider goes OUT. FIFO revivals only fire if either team had prior outs — at full strength, no revival happens (the just-outed players are NOT used to satisfy revivals).',
+    note: 'Custom DB trigger logic (migration 0016) handles the no-cross-revival rule.',
+    selection: 'Raider + 1+ defenders',
+    tone: 'neutral',
   },
   {
     label: 'Defender out',

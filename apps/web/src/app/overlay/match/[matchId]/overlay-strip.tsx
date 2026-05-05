@@ -81,6 +81,11 @@ function describeLastEvent(e: LastEvent): string {
 
   switch (e.type) {
     case 'raid_point':
+      if (reason === 'raider_self_out_plus_defender_self_out') {
+        return r
+          ? `${r} self out + def out +${e.pointsAttacker}|+1`
+          : `Raider + def self-out +${e.pointsAttacker}|+1`;
+      }
       if (reason === 'bonus_plus_defender_self_out') {
         return r ? `${r} bonus +${e.pointsAttacker}` : `Bonus + def out +${e.pointsAttacker}`;
       }

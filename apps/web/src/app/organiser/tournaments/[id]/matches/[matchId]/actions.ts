@@ -620,6 +620,60 @@ export async function recordBonusPlusDefenderSelfOutAction(input: {
 }
 
 // ============================================================
+// Raider self-out + Defender self-out — both raider AND one or more
+// defenders voluntarily exit in the same raid. Recorded as a single
+// raid_point event with reason 'raider_self_out_plus_defender_self_out';
+// the trigger added in migration 0016 marks every listed defender + the
+// raider OUT and revives FIFO from each team's pre-existing out pool
+// (full-strength teams = no revival). Score: attack +N, defence +1.
+// ============================================================
+export async function recordRaiderSelfOutPlusDefenderSelfOutAction(input: {
+  matchId: string;
+  attackingTeamId: string;
+  raiderId: string;
+  defenderIds: string[]; // 1+ defenders that self-exited
+  half: number;
+  clockSeconds: number;
+}) {
+  const user = await getSessionUser();
+  if (!user?.tenantId) return { error: 'Not authorised' };
+  if (!input.raiderId) return { error: 'Pick the raider first.' };
+  if (input.defenderIds.length === 0) {
+    return { error: 'Pick at least one defender who stepped out.' };
+  }
+
+  const supabase = await createClient();
+
+  const { error } = await supabase.from('match_events').insert({
+    tenant_id: user.tenantId,
+    match_id: input.matchId,
+    type: 'raid_point',
+    attacking_team_id: input.attackingTeamId,
+    points_attacker: input.defenderIds.length,
+    points_defender: 1,
+    half: input.half,
+    clock_seconds: input.clockSeconds,
+    raider_id: input.raiderId,
+    defender_ids: input.defenderIds,
+    details: { reason: 'raider_self_out_plus_defender_self_out' },
+    created_by: user.id,
+  });
+  if (error) return { error: error.message };
+
+  await supabase
+    .from('matches')
+    .update({
+      clock_seconds: input.clockSeconds,
+      current_half: input.half,
+      current_raider_id: null,
+      current_attacking_team_id: null,
+    })
+    .eq('id', input.matchId);
+
+  return { ok: true };
+}
+
+// ============================================================
 // Touch + Defender self-out — raider touches some defenders AND one or
 // more other defenders voluntarily step off during the same raid. Net:
 // attack +(touches + self-outs), every involved defender OUT, attackers
