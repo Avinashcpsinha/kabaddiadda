@@ -532,13 +532,14 @@ export function ScoringConsole({
         else if (next <= 0) {
           beepTimeUp();
           setRaidRunning(false);
-          // 30s auto-finish — fire Complete Raid via setTimeout so the
-          // state mutations don't nest inside this updater. completeRaidNow
-          // reads from refs (raiderIdRef / actionsThisRaidRef) and decides
-          // empty_raid vs silent end.
-          setTimeout(() => {
-            if (raiderIdRef.current) completeRaidNow();
-          }, 0);
+          // Timer hits 0 — beep + stop, but DO NOT auto-fire Complete
+          // Raid. The scorer often needs an extra second or two to
+          // record an action that happened right at the buzzer; an
+          // auto-finish here would commit an empty_raid before they
+          // can click. The picker stays open and the standalone
+          // Complete Raid button is still available — the operator
+          // commits manually whenever they're ready. The "Raid time
+          // expired" banner below makes the prompt obvious.
           return 0;
         }
         return next;
@@ -1281,6 +1282,25 @@ export function ScoringConsole({
                 <span className="font-bold uppercase tracking-wider">Super Tackle Zone</span>
                 <span className="text-muted-foreground">
                   {defending.name} have {defendersOnMatCount} on mat — any tackle or forced raider-out scores +2 instead of +1.
+                </span>
+              </div>
+            )}
+
+            {/* Raid time expired prompt — shown when the 30s raid timer
+                has ticked to 0 with a raider still on the picker (i.e.
+                the operator hasn't completed the raid yet). The timer
+                no longer auto-fires Complete Raid so this stays
+                visible until the operator commits manually. */}
+            {raiderId && !raidRunning && raidLeft === 0 && (
+              <div className="flex shrink-0 items-center gap-2 rounded-md border-2 border-rose-500 bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-400">
+                <AlertTriangle className="h-4 w-4 shrink-0 animate-pulse" />
+                <span className="font-bold uppercase tracking-wider">
+                  Raid time expired
+                </span>
+                <span className="text-muted-foreground">
+                  Record what happened — Get Points (raid continues) or
+                  Complete Raid to end. No auto-fire; you have unlimited
+                  time to enter the events.
                 </span>
               </div>
             )}
