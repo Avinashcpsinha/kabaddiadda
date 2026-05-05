@@ -48,9 +48,9 @@ export default async function OrganiserLayout({ children }: { children: React.Re
   return (
     <div className="flex min-h-screen bg-secondary/10">
       <DashboardSidebar items={NAV} title={tenant?.name ?? 'Organiser'} accent="flame" />
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         <DashboardTopbar user={user} />
-        <main className="flex-1 p-6 md:p-8">{children}</main>
+        <main className="min-w-0 flex-1 overflow-x-hidden p-3 sm:p-6 md:p-8">{children}</main>
       </div>
     </div>
   );
