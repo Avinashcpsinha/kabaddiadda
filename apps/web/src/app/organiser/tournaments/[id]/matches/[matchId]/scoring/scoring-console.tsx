@@ -16,7 +16,6 @@ import {
   Pause,
   Play,
   Plus,
-  RotateCcw,
   Shield,
   Sparkles,
   Square as SquareIcon,
@@ -551,38 +550,10 @@ export function ScoringConsole({
     return () => clearInterval(t);
   }, [raidRunning, running, raiderId]);
 
-  function startRaid() {
-    if (!isLive) {
-      toast.error('Start the match first.');
-      return;
-    }
-    if (!raiderId) {
-      toast.error('Pick a raider first — the raid timer needs a raider.');
-      return;
-    }
-    primeAudio();
-    setRaidLeft(RAID_SECONDS);
-    setRaidRunning(true);
-  }
-
-  function pauseRaid() {
-    setRaidRunning(false);
-  }
-
-  function resumeRaid() {
-    if (raidLeft <= 0) return;
-    if (!raiderId) {
-      toast.error('Pick a raider first — the raid timer needs a raider.');
-      return;
-    }
-    primeAudio();
-    setRaidRunning(true);
-  }
-
-  function resetRaid() {
-    setRaidRunning(false);
-    setRaidLeft(0);
-  }
+  // (No manual raid Start / Pause / Resume / Reset handlers — the
+  // raid clock is fully automatic now: it arms on raider pick,
+  // pauses with the global clock, and resets when the raid ends or
+  // the raider is cleared.)
 
   // Reset raider + touched defenders when the attacking team flips.
   React.useEffect(() => {
@@ -1153,52 +1124,14 @@ export function ScoringConsole({
               >
                 {raidLeft.toString().padStart(2, '0')}
               </div>
-              {raidRunning ? (
-                <button
-                  type="button"
-                  onClick={pauseRaid}
-                  className="rounded border border-border bg-card px-2 py-1 text-[10px] hover:bg-accent/30"
-                >
-                  Pause
-                </button>
-              ) : raidLeft > 0 ? (
-                <button
-                  type="button"
-                  onClick={resumeRaid}
-                  disabled={!raiderId}
-                  title={
-                    !raiderId
-                      ? 'Pick a raider first to resume the raid timer'
-                      : 'Resume the raid timer'
-                  }
-                  className="rounded border border-primary bg-primary/10 px-2 py-1 text-[10px] text-primary disabled:opacity-50"
-                >
-                  Resume
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={startRaid}
-                  disabled={!isLive || !raiderId}
-                  title={
-                    !raiderId
-                      ? 'Pick a raider first to start the raid timer'
-                      : 'Start the 30-second raid timer'
-                  }
-                  className="rounded border border-primary bg-primary/10 px-2 py-1 text-[10px] text-primary disabled:opacity-50"
-                >
-                  Start
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={resetRaid}
-                disabled={!raidRunning && raidLeft === 0}
-                className="rounded border border-border bg-card p-1 hover:bg-accent/30 disabled:opacity-40"
-                aria-label="Reset raid timer"
-              >
-                <RotateCcw className="h-3 w-3" />
-              </button>
+              {/* No manual raid Start / Pause / Resume / Reset buttons.
+                  The raid clock auto-arms when a raider is picked and
+                  auto-resets when the raid ends or the raider is
+                  cleared. The global match Pause / Resume buttons
+                  cascade to the raid clock via the interval coupling
+                  (raid only ticks while running && raidRunning &&
+                  raiderId), so global Resume with no raider on the mat
+                  starts only the match clock. */}
             </div>
 
             {/* Match controls */}
