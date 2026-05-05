@@ -81,6 +81,11 @@ interface RecentEvent {
   points_attacker: number;
   points_defender: number;
   attacking_team_id: string;
+  /** details.reason flag — distinguishes raid_point variants (touch
+   *  vs defender_self_out vs touch_plus_defender_self_out) and
+   *  tackle_point variants (vanilla vs raider_self_out vs
+   *  bonus_plus_tackle). Drives the commentary template. */
+  reason?: string | null;
   created_at: string;
   raider: PlayerRef | null;
   defenders: PlayerRef[];
@@ -154,44 +159,147 @@ function joinDefenders(defenders: PlayerRef[]): string {
   return `${defenders.slice(0, 2).map(formatPlayer).join(', ')} +${defenders.length - 2}`;
 }
 
-function describeEvent(e: RecentEvent): string {
+/**
+ * Describe a recorded event as a one-line broadcast-style sentence.
+ *
+ * The string is shown in the event log (right column) — narrow column,
+ * so we keep it descriptive but not novel-length. Hover tooltip shows
+ * the same string in full.
+ *
+ * `attackingTeamName` is the short name (e.g. "BEN", "MUM") of the
+ * attacking team for the event, used to attribute scores. Falls back
+ * to "the raiders" / "the defenders" when missing.
+ */
+function describeEvent(e: RecentEvent, attackingTeamName: string | null): string {
   const raider = e.raider ? formatPlayer(e.raider) : null;
+  const raiderOrFallback = raider ?? 'the raider';
   const defenderText = joinDefenders(e.defenders);
+  const defendersOrFallback = defenderText || 'a defender';
+  const att = attackingTeamName ?? 'the raiders';
+  const N = e.points_attacker;
+  const reason = e.reason ?? null;
   const fallback = EVENT_LABEL[e.type] ?? e.type;
 
   switch (e.type) {
-    case 'raid_point':
-      if (raider && defenderText) return `${raider} → ${defenderText}`;
-      if (raider) return `${raider} touch`;
-      return fallback;
+    case 'raid_point': {
+      if (reason === 'defender_self_out' || reason === 'defender_out_of_bounds') {
+        const verb =
+          reason === 'defender_self_out'
+            ? 'step off the mat'
+            : 'pushed out of bounds';
+        if (e.defenders.length > 1) {
+          return `${defenderText} ${verb} — ${att} +${N}, ${e.defenders.length} defenders OUT.`;
+        }
+        return `${defendersOrFallback} ${verb} — ${att} +${N}, defender OUT.`;
+      }
+      if (reason === 'bonus_plus_defender_self_out') {
+        return `${raiderOrFallback} grabs the bonus, ${defendersOrFallback} step off — ${att} +${N}.`;
+      }
+      if (reason === 'touch_plus_defender_self_out') {
+        return `${raiderOrFallback} touches and ${defendersOrFallback} self-exit — ${att} +${N}, ${e.defenders.length} OUT.`;
+      }
+      if (reason === 'raider_self_out_plus_defender_self_out') {
+        return `Mass exit — ${raiderOrFallback} and ${defendersOrFallback} all step off the mat. ${att} +${N}, defence +1.`;
+      }
+      // Vanilla touch.
+      if (raider && defenderText) {
+        if (e.defenders.length === 1)
+          return `${raider} dives in, taps ${defenderText}, races home — ${att} +${N}.`;
+        return `${raider} weaves through the defence and touches ${defenderText} — ${att} +${N}, ${e.defenders.length} defenders OUT.`;
+      }
+      if (raider) return `${raider} returns with the touch — ${att} +${N}.`;
+      return `${fallback} — ${att} +${N}.`;
+    }
+
     case 'super_raid':
-      if (raider && defenderText) return `${raider} → ${defenderText} (super)`;
-      if (raider) return `${raider} super raid`;
-      return fallback;
+      if (raider && defenderText)
+        return `SUPER RAID! ${raider} touches ${defenderText} in one breathtaking dash — ${att} +${N}.`;
+      if (raider)
+        return `SUPER RAID! ${raider} clears the defence single-handedly — ${att} +${N}.`;
+      return `Super Raid — ${att} +${N}.`;
+
     case 'bonus_point':
-      return raider ? `${raider} bonus` : 'Bonus';
-    case 'tackle_point':
-      if (raider && defenderText) return `${defenderText} tackled ${raider}`;
-      if (raider) return `Tackled ${raider}`;
-      return fallback;
+      if (raider)
+        return `${raider} sails across the bonus line and returns home — ${att} +1.`;
+      return `Bonus line crossed — ${att} +1.`;
+
+    case 'tackle_point': {
+      if (reason === 'bonus_plus_tackle')
+        return `${raiderOrFallback} grabbed the bonus but couldn't escape — caught by ${defendersOrFallback}. Both teams +1.`;
+      if (reason === 'bonus_plus_self_out')
+        return `${raiderOrFallback} bonus then voluntarily steps off — ${att} +1, defence +1.`;
+      if (reason === 'raider_self_out')
+        return `${raiderOrFallback} steps off voluntarily — raid abandoned, defence +1.`;
+      if (reason === 'raider_out_of_bounds')
+        return `${raiderOrFallback} forced out of bounds under defender pressure — defence +1.`;
+      if (raider && defenderText)
+        return `${defenderText} bring down ${raider} — raid over, defence +1.`;
+      if (raider) return `${raider} caught by the defence — defence +1.`;
+      return `Tackle — defence +1.`;
+    }
+
     case 'super_tackle':
-      if (raider && defenderText) return `${defenderText} super-tackled ${raider}`;
-      if (raider) return `Super tackle on ${raider}`;
-      return fallback;
+      if (raider && defenderText)
+        return `SUPER TACKLE! ${defenderText} catch ${raider} short-handed — defence +2.`;
+      if (raider)
+        return `SUPER TACKLE on ${raider} — defending side ≤3 on mat — defence +2.`;
+      return `Super tackle — defence +2.`;
+
     case 'do_or_die_raid':
-      return raider ? `${raider} do-or-die` : 'Do-or-die raid';
+      if (e.points_attacker > 0) {
+        if (raider && defenderText)
+          return `Do-or-Die converted! ${raider} touches ${defenderText} — ${att} +${N}.`;
+        if (raider)
+          return `Do-or-Die converted! ${raider} brings home the points — ${att} +${N}.`;
+        return `Do-or-Die converted — ${att} +${N}.`;
+      }
+      if (raider)
+        return `Do-or-Die fails — ${raider} OUT, defence +1, counter resets.`;
+      return `Do-or-Die fails — defence +1.`;
+
     case 'empty_raid':
-      return raider ? `${raider} empty` : 'Empty raid';
+      if (raider)
+        return `${raider} returns empty-handed — do-or-die counter ticks up.`;
+      return `Empty raid — do-or-die counter ticks up.`;
+
     case 'all_out':
-      return 'All out';
+      return `ALL OUT! ${att} sweep the mat — bonus +2 awarded.`;
+
     case 'substitution': {
       const inText = e.playerIn ? formatPlayer(e.playerIn) : null;
       const outText = e.playerOut ? formatPlayer(e.playerOut) : null;
-      if (inText && outText) return `Sub: ${inText} IN, ${outText} OUT`;
-      if (inText) return `Sub: ${inText} IN`;
-      if (outText) return `Sub: ${outText} OUT`;
-      return 'Substitution';
+      if (inText && outText)
+        return `Substitution for ${att}: ${inText} comes on, ${outText} heads to the bench.`;
+      if (inText) return `Substitution for ${att}: ${inText} enters the mat.`;
+      if (outText) return `Substitution for ${att}: ${outText} comes off.`;
+      return `${att} make a substitution.`;
     }
+
+    case 'green_card':
+      return raider
+        ? `Green card shown to ${raider} — formal warning, no state change.`
+        : 'Green card issued.';
+    case 'yellow_card':
+      return raider
+        ? `Yellow card on ${raider} — 2-minute suspension.`
+        : 'Yellow card issued.';
+    case 'red_card':
+      return raider
+        ? `Red card on ${raider} — out for the rest of the match.`
+        : 'Red card issued.';
+    case 'card_expired':
+      return raider
+        ? `${raider}'s yellow-card suspension expires — back on the mat.`
+        : 'Card suspension expires.';
+
+    case 'technical_point':
+      return `Technical point awarded — ${att} +${N || 1}.`;
+
+    case 'review_upheld':
+      return `Review upheld — last event for ${att} reversed.`;
+    case 'review_overturned':
+      return `Review overturned — call stands for ${att}.`;
+
     default:
       return fallback;
   }
@@ -1762,8 +1870,11 @@ export function ScoringConsole({
                       <Badge variant="outline" className="shrink-0 text-[10px]">
                         {team.short_name || initials(team.name)}
                       </Badge>
-                      <span className="flex-1 truncate" title={describeEvent(e)}>
-                        {describeEvent(e)}
+                      <span
+                        className="flex-1 truncate"
+                        title={describeEvent(e, team.short_name || team.name)}
+                      >
+                        {describeEvent(e, team.short_name || team.name)}
                       </span>
                       <span className="font-mono">
                         {e.points_attacker > 0 && (

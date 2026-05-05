@@ -68,74 +68,120 @@ function shortPlayer(p: PlayerRef): string {
 }
 
 /**
- * Builds a one-line commentary for the most recent event. Mirrors the
- * scoring console's describeEvent but trimmed to fit a broadcast strip.
+ * One-line broadcast-style commentary for the most recent event.
+ * Slightly more compact than the scoring console's describeEvent
+ * because the overlay shows it under the team score within a fixed
+ * width (the row truncates on overflow).
+ *
+ * `attackingTeamName` (e.g. "BEN" / "MUM") attributes scores to the
+ * right team so a viewer who tunes in mid-match has context.
  */
-function describeLastEvent(e: LastEvent): string {
-  const r = e.raider ? shortPlayer(e.raider) : '';
-  const d = e.defenders[0] ? shortPlayer(e.defenders[0]) : '';
+function describeLastEvent(e: LastEvent, attackingTeamName: string): string {
+  const raider = e.raider ? shortPlayer(e.raider) : null;
+  const raiderOrFallback = raider ?? 'raider';
+  const d1 = e.defenders[0] ? shortPlayer(e.defenders[0]) : null;
+  const defenderText =
+    e.defenders.length > 0
+      ? e.defenders.length <= 2
+        ? e.defenders.map(shortPlayer).join(', ')
+        : `${e.defenders.slice(0, 2).map(shortPlayer).join(', ')} +${e.defenders.length - 2}`
+      : null;
+  const defendersOrFallback = defenderText ?? 'a defender';
   const reason =
     e.details && typeof e.details === 'object' && 'reason' in e.details
       ? (e.details.reason as string)
       : null;
+  const att = attackingTeamName;
+  const N = e.pointsAttacker;
 
   switch (e.type) {
-    case 'raid_point':
-      if (reason === 'raider_self_out_plus_defender_self_out') {
-        return r
-          ? `${r} self out + def out +${e.pointsAttacker}|+1`
-          : `Raider + def self-out +${e.pointsAttacker}|+1`;
-      }
-      if (reason === 'bonus_plus_defender_self_out') {
-        return r ? `${r} bonus +${e.pointsAttacker}` : `Bonus + def out +${e.pointsAttacker}`;
-      }
-      if (reason === 'touch_plus_defender_self_out') {
-        return r
-          ? `${r} touch + def out +${e.pointsAttacker}`
-          : `Touch + def out +${e.pointsAttacker}`;
-      }
+    case 'raid_point': {
       if (reason === 'defender_self_out' || reason === 'defender_out_of_bounds') {
-        return `Defender out +${e.pointsAttacker}`;
+        const verb = reason === 'defender_self_out' ? 'self-out' : 'out of bounds';
+        return e.defenders.length > 1
+          ? `${defenderText} ${verb} — ${att} +${N}`
+          : `${defendersOrFallback} ${verb} — ${att} +${N}`;
       }
-      return r ? `${r} touch +${e.pointsAttacker}` : `Touch +${e.pointsAttacker}`;
+      if (reason === 'bonus_plus_defender_self_out')
+        return `${raiderOrFallback} bonus + ${defendersOrFallback} self-out — ${att} +${N}`;
+      if (reason === 'touch_plus_defender_self_out')
+        return `${raiderOrFallback} touch + def out — ${att} +${N}`;
+      if (reason === 'raider_self_out_plus_defender_self_out')
+        return `Mass exit — ${att} +${N}, defence +1`;
+      if (raider && defenderText) {
+        return e.defenders.length === 1
+          ? `${raider} taps ${defenderText} and returns — ${att} +${N}`
+          : `${raider} touches ${defenderText} — ${att} +${N}`;
+      }
+      return raider
+        ? `${raider} returns with the touch — ${att} +${N}`
+        : `Touch — ${att} +${N}`;
+    }
     case 'super_raid':
-      return r ? `${r} super raid +${e.pointsAttacker}` : `Super raid +${e.pointsAttacker}`;
+      return raider && defenderText
+        ? `SUPER RAID! ${raider} touches ${defenderText} — ${att} +${N}`
+        : raider
+          ? `SUPER RAID by ${raider} — ${att} +${N}`
+          : `Super raid — ${att} +${N}`;
     case 'bonus_point':
-      return r ? `${r} bonus +1` : 'Bonus +1';
-    case 'tackle_point':
-      if (reason === 'bonus_plus_tackle') return r ? `${r} B+T` : 'Bonus + Tackle';
-      if (reason === 'bonus_plus_self_out') return r ? `${r} B+SO` : 'Bonus + Self-out';
-      if (reason === 'raider_self_out') return r ? `${r} self out` : 'Self out';
-      if (reason === 'raider_out_of_bounds') return r ? `${r} out` : 'Raider out';
-      return d ? `${d} tackled ${r || 'raider'} +1` : r ? `Tackle on ${r} +1` : 'Tackle +1';
+      return raider
+        ? `${raider} crosses the bonus line — ${att} +1`
+        : `Bonus — ${att} +1`;
+    case 'tackle_point': {
+      if (reason === 'bonus_plus_tackle')
+        return `${raiderOrFallback} bonus then caught — ${att} +1, defence +1`;
+      if (reason === 'bonus_plus_self_out')
+        return `${raiderOrFallback} bonus + self-out — ${att} +1, defence +1`;
+      if (reason === 'raider_self_out')
+        return `${raiderOrFallback} steps off voluntarily — defence +1`;
+      if (reason === 'raider_out_of_bounds')
+        return `${raiderOrFallback} forced out of bounds — defence +1`;
+      return d1 || defenderText
+        ? `${defendersOrFallback} tackle ${raiderOrFallback} — defence +1`
+        : raider
+          ? `${raider} caught — defence +1`
+          : `Tackle — defence +1`;
+    }
     case 'super_tackle':
-      return d
-        ? `${d} super tackle +2`
-        : r
-          ? `Super tackle on ${r} +2`
-          : 'Super tackle +2';
+      return d1 || defenderText
+        ? `SUPER TACKLE! ${defendersOrFallback} catch ${raiderOrFallback} — defence +2`
+        : raider
+          ? `SUPER TACKLE on ${raider} — defence +2`
+          : `Super tackle — defence +2`;
     case 'all_out':
-      return 'All-out +2';
+      return `ALL OUT! ${att} sweep the mat — bonus +2`;
     case 'do_or_die_raid':
-      return e.pointsAttacker > 0
-        ? r
-          ? `${r} DoD scored +${e.pointsAttacker}`
-          : `DoD scored +${e.pointsAttacker}`
-        : r
-          ? `${r} DoD failed`
-          : 'DoD failed';
+      if (e.pointsAttacker > 0)
+        return raider
+          ? `Do-or-Die converted by ${raider} — ${att} +${N}`
+          : `Do-or-Die converted — ${att} +${N}`;
+      return raider
+        ? `Do-or-Die fails — ${raider} OUT, defence +1`
+        : `Do-or-Die fails — defence +1`;
     case 'empty_raid':
-      return r ? `${r} empty raid` : 'Empty raid';
+      return raider
+        ? `${raider} returns empty — DoD counter ticks up`
+        : `Empty raid — DoD counter ticks up`;
     case 'green_card':
-      return 'Green card';
+      return raider ? `Green card on ${raider} — warning` : 'Green card issued';
     case 'yellow_card':
-      return 'Yellow card';
+      return raider
+        ? `Yellow card on ${raider} — 2-min suspension`
+        : 'Yellow card issued';
     case 'red_card':
-      return 'Red card';
+      return raider ? `Red card on ${raider} — out of the match` : 'Red card issued';
+    case 'card_expired':
+      return raider
+        ? `${raider}'s suspension expires — back on mat`
+        : 'Card suspension expires';
     case 'substitution':
-      return 'Substitution';
+      return `${att} make a substitution`;
     case 'technical_point':
-      return `Tech +${e.pointsAttacker}`;
+      return `Technical point — ${att} +${N || 1}`;
+    case 'review_upheld':
+      return `Review upheld — last call reversed for ${att}`;
+    case 'review_overturned':
+      return `Review overturned — call stands for ${att}`;
     default:
       return e.type;
   }
@@ -350,7 +396,19 @@ export function OverlayStrip({
   //     raider, the *other* team shows the last event commentary.
   //   • Between raids: the team that scored on the last event shows the
   //     commentary (the other side stays empty).
-  const lastEventText = lastEvent ? describeLastEvent(lastEvent) : null;
+  // Resolve the attacking-team short name for the last event so the
+  // commentary attributes scores correctly (e.g. "BEN +2" rather than
+  // a context-free "+2").
+  const lastEventAttackerName = lastEvent
+    ? lastEvent.attackingTeamId === home.id
+      ? home.short_name || home.name.slice(0, 3).toUpperCase()
+      : lastEvent.attackingTeamId === away.id
+        ? away.short_name || away.name.slice(0, 3).toUpperCase()
+        : ''
+    : '';
+  const lastEventText = lastEvent
+    ? describeLastEvent(lastEvent, lastEventAttackerName)
+    : null;
   const raidActive = !!currentRaider && (homeAttacking || awayAttacking);
 
   function sideLabel(thisSideAttacking: boolean, thisSideId: string): string | null {

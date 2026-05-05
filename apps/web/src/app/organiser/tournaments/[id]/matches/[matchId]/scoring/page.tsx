@@ -93,9 +93,17 @@ export default async function ScoringPage({
   }
 
   const enrichedEvents = (events ?? []).map((e) => {
+    const detailsObj =
+      e.details && typeof e.details === 'object'
+        ? (e.details as Record<string, unknown>)
+        : null;
+    const reason =
+      detailsObj && typeof detailsObj.reason === 'string'
+        ? (detailsObj.reason as string)
+        : null;
     const subDetails =
-      e.type === 'substitution' && e.details
-        ? (e.details as { in?: string; out?: string })
+      e.type === 'substitution' && detailsObj
+        ? (detailsObj as { in?: string; out?: string })
         : null;
     return {
       id: e.id,
@@ -105,6 +113,7 @@ export default async function ScoringPage({
       points_attacker: e.points_attacker,
       points_defender: e.points_defender,
       attacking_team_id: e.attacking_team_id,
+      reason,
       created_at: e.created_at,
       raider: lookupPlayer(e.raider_id),
       defenders: ((e.defender_ids as string[] | null) ?? [])
