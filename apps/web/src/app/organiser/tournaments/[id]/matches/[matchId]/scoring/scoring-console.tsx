@@ -1199,11 +1199,18 @@ export function ScoringConsole({
                   )}
                 </div>
               </div>
-              <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-2">
+              <div className="relative grid min-h-0 flex-1 gap-3 md:grid-cols-2">
+                {/* Mid-mat divider — kabaddi mat hint between the two
+                    halves. Only renders on md+ where the columns are
+                    side-by-side. */}
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-y-2 left-1/2 hidden w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-amber-500/40 to-transparent md:block"
+                />
                 <PickerColumn
                   label="Raider"
                   teamName={attacking.name}
-                  accent="text-primary"
+                  tone="attack"
                   helperText={raiderId ? '1 selected' : 'Tap one'}
                 >
                   {attackingSlots.length === 0 ? (
@@ -1224,7 +1231,7 @@ export function ScoringConsole({
                 <PickerColumn
                   label="Defenders"
                   teamName={defending.name}
-                  accent="text-sky-500"
+                  tone="defend"
                   helperText={touchedCount > 0 ? `${touchedCount} selected` : 'Tap any'}
                 >
                   {defendingSlots.length === 0 ? (
@@ -2313,30 +2320,66 @@ function SmallActionBtn({
 function PickerColumn({
   label,
   teamName,
-  accent,
+  tone,
   helperText,
   children,
 }: {
   label: string;
   teamName: string;
-  accent: string;
+  tone: 'attack' | 'defend';
   helperText: string;
   children: React.ReactNode;
 }) {
+  const isAttack = tone === 'attack';
   return (
-    <div className="flex min-h-0 flex-col">
-      <div className="mb-2 flex shrink-0 items-baseline justify-between gap-2">
+    <div
+      className={cn(
+        'relative flex min-h-0 flex-col overflow-hidden rounded-xl border-2 p-3 transition-colors',
+        isAttack
+          ? 'border-primary/40 bg-gradient-to-b from-primary/15 via-primary/5 to-primary/0'
+          : 'border-sky-500/40 bg-gradient-to-b from-sky-500/15 via-sky-500/5 to-sky-500/0',
+      )}
+    >
+      {/* Mat-zone hint — diagonal stripes evoke the kabaddi-mat surface */}
+      <div
+        aria-hidden
+        className={cn(
+          'pointer-events-none absolute inset-0 opacity-[0.04]',
+          isAttack ? 'bg-primary' : 'bg-sky-500',
+        )}
+        style={{
+          backgroundImage:
+            'repeating-linear-gradient(45deg, currentColor 0 1px, transparent 1px 12px)',
+        }}
+      />
+      <div className="relative mb-3 flex shrink-0 items-end justify-between gap-2">
         <div className="min-w-0">
-          <div className={cn('text-[10px] font-semibold uppercase tracking-wider', accent)}>
+          <div
+            className={cn(
+              'font-display text-2xl font-black uppercase leading-none tracking-[0.08em]',
+              isAttack ? 'text-primary' : 'text-sky-500',
+            )}
+          >
             {label}
           </div>
-          <div className="truncate text-xs text-muted-foreground">{teamName}</div>
+          <div className="mt-1 truncate text-xs font-semibold text-foreground/80">
+            {teamName}
+          </div>
         </div>
-        <span className="text-[10px] text-muted-foreground">{helperText}</span>
+        <span
+          className={cn(
+            'shrink-0 rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wider',
+            isAttack
+              ? 'bg-primary/20 text-primary'
+              : 'bg-sky-500/20 text-sky-500',
+          )}
+        >
+          {helperText}
+        </span>
       </div>
       {/* 2-col grid; on short viewports the column scrolls internally so chips
           never spill over the action-buttons row below. */}
-      <div className="grid min-h-0 flex-1 grid-cols-2 content-start gap-1 overflow-y-auto pr-1">
+      <div className="relative grid min-h-0 flex-1 grid-cols-2 content-start gap-1 overflow-y-auto pr-1">
         {children}
       </div>
     </div>
@@ -2402,13 +2445,13 @@ function PlayerChip({
   disabled?: boolean;
   onClick: () => void;
 }) {
-  const baseClass = 'flex items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs transition-all';
+  const baseClass = 'flex items-center gap-2 rounded-md border-2 px-2 py-1.5 text-left text-xs transition-all';
   const stateClass = disabled
     ? 'cursor-not-allowed border-border/40 bg-muted/20 opacity-50'
     : selected
       ? tone === 'attack'
-        ? 'border-primary bg-primary/15 text-primary shadow-sm'
-        : 'border-sky-500 bg-sky-500/15 text-sky-500 shadow-sm'
+        ? 'border-primary bg-primary/20 text-primary font-semibold shadow-md ring-2 ring-primary/40'
+        : 'border-sky-500 bg-sky-500/20 text-sky-500 font-semibold shadow-md ring-2 ring-sky-500/40'
       : 'border-border bg-card hover:bg-accent/30';
 
   // Indicator on the LEFT shows the selection mode at a glance:
