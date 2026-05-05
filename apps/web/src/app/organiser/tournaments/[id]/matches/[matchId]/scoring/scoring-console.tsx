@@ -1264,20 +1264,23 @@ export function ScoringConsole({
                   {pendingAction.label} {pendingAction.sub}
                 </span>
                 <div className="ml-auto flex gap-1">
-                  {!pendingAction.endsRaid && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={getPointsPending}
-                      disabled={pending}
-                      title="Record the action — raid continues"
-                    >
-                      Get Points
-                    </Button>
-                  )}
+                  {/* Get Points is always available — operator decides
+                      whether the raid continues. It's the primary CTA
+                      because most in-raid actions (touch / bonus /
+                      defender out) chain. Complete Raid is the
+                      explicit "raid ends" alternative. */}
                   <Button
                     size="sm"
                     variant="flame"
+                    onClick={getPointsPending}
+                    disabled={pending}
+                    title="Record the action — raid continues, raider stays picked"
+                  >
+                    Get Points
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
                     onClick={completeRaidPending}
                     disabled={pending}
                     title="Record the action — raid ends, picker resets"
