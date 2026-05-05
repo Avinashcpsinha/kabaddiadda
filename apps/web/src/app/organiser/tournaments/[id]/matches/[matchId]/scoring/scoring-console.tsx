@@ -1106,11 +1106,11 @@ export function ScoringConsole({
   );
 
   return (
-    <div className="flex min-h-[640px] flex-col gap-3">
+    <div className="flex min-h-[640px] w-full min-w-0 max-w-full flex-col gap-3 overflow-x-hidden">
       {/* HEADER BAR — score, clocks, match controls in a single tight row */}
       <Card className="shrink-0 overflow-hidden">
         <CardContent className="grid grid-cols-1 items-center gap-4 p-4 md:grid-cols-[1fr_auto_1fr]">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <CompactTeamScore
               team={home}
               score={initial.homeScore}
@@ -1214,7 +1214,7 @@ export function ScoringConsole({
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex min-w-0 items-center justify-end gap-2">
             <ScoreAdjustControl
               onPlus={() => handleScoreAdjust(away.id, 1)}
               onMinus={() => handleScoreAdjust(away.id, -1)}
@@ -2762,15 +2762,15 @@ function RaidingTeamButton({
       type="button"
       onClick={onClick}
       className={cn(
-        'flex flex-col items-center gap-2 rounded-md border-2 px-4 py-3 text-sm font-semibold transition-all',
+        'flex min-w-0 flex-col items-center gap-2 overflow-hidden rounded-md border-2 px-3 py-3 text-sm font-semibold transition-all sm:px-4',
         active
           ? 'border-primary bg-primary/10 text-primary'
           : 'border-border text-muted-foreground hover:border-border/80',
       )}
     >
-      <div className="flex items-center gap-2">
-        <Flame className="h-4 w-4" />
-        {team.name}
+      <div className="flex min-w-0 items-center gap-2">
+        <Flame className="h-4 w-4 shrink-0" />
+        <span className="truncate">{team.name}</span>
       </div>
       {totalSlots > 0 && (
         <div className="flex items-center gap-2">
