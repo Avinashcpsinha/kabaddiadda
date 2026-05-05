@@ -84,6 +84,11 @@ function describeLastEvent(e: LastEvent): string {
       if (reason === 'bonus_plus_defender_self_out') {
         return r ? `${r} bonus +${e.pointsAttacker}` : `Bonus + def out +${e.pointsAttacker}`;
       }
+      if (reason === 'touch_plus_defender_self_out') {
+        return r
+          ? `${r} touch + def out +${e.pointsAttacker}`
+          : `Touch + def out +${e.pointsAttacker}`;
+      }
       if (reason === 'defender_self_out' || reason === 'defender_out_of_bounds') {
         return `Defender out +${e.pointsAttacker}`;
       }

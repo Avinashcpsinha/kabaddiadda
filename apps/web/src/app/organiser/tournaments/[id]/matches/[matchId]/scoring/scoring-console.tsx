@@ -56,6 +56,7 @@ import {
   recordRaiderOutOfBoundsAction,
   recordSubstitutionAction,
   recordTechPointAction,
+  recordTouchPlusDefenderSelfOutAction,
   setMatchStatusAction,
   type EventType,
 } from '../actions';
@@ -649,6 +650,43 @@ export function ScoringConsole({
         setRaidLeft(0);
         toast.success(
           `Bonus + Defender out — attack +${1 + touchedDefenderIds.length}`,
+        );
+      }
+      return res;
+    });
+  }
+
+  // Touch + Defender self-out — single raid where some defenders are
+  // touched AND one or more others voluntarily step off the mat. All
+  // selected defenders are marked OUT; attack scores +1 per defender.
+  function handleTouchPlusDefenderSelfOut() {
+    if (!isLive) {
+      toast.error('Start the match first.');
+      return;
+    }
+    if (!raiderId) {
+      toast.error('Pick the raider first.');
+      return;
+    }
+    if (touchedDefenderIds.length === 0) {
+      toast.error('Pick the defender(s) involved in the raid first.');
+      return;
+    }
+    withSubmit(async () => {
+      const res = await recordTouchPlusDefenderSelfOutAction({
+        matchId,
+        attackingTeamId: attackingId,
+        raiderId,
+        defenderIds: touchedDefenderIds,
+        half,
+        clockSeconds: clock,
+      });
+      if (!res?.error) {
+        clearSelections();
+        setRaidRunning(false);
+        setRaidLeft(0);
+        toast.success(
+          `Touch + Def self-out — attack +${touchedDefenderIds.length}`,
         );
       }
       return res;
@@ -1260,7 +1298,7 @@ export function ScoringConsole({
                 picked, the trigger auto-strikes the lowest-jersey defender.
                 Empty during a do-or-die raid is auto-routed to the
                 do_or_die_raid event type so the raider goes OUT properly. */}
-            <div className="grid shrink-0 grid-cols-4 gap-1.5 border-t border-border/50 pt-3 sm:grid-cols-10">
+            <div className="grid shrink-0 grid-cols-4 gap-1.5 border-t border-border/50 pt-3 sm:grid-cols-11">
               <ActionBtn
                 icon={<Target />}
                 label="Touch"
@@ -1326,6 +1364,29 @@ export function ScoringConsole({
                       : `Touch + Bonus — ${touchedCount} touch(es) and bonus line crossed. Attack +${touchedCount + 1}.`
                 }
                 staged={pendingAction?.label === 'T+B'}
+              />
+              <ActionBtn
+                icon={<Target />}
+                label="T+DSO"
+                sub={`+${touchedCount || 1}`}
+                onClick={() =>
+                  stageOrRun(
+                    'T+DSO',
+                    `+${touchedCount}`,
+                    'attack',
+                    handleTouchPlusDefenderSelfOut,
+                  )
+                }
+                disabled={!isLive || pending || !raiderId || touchedCount === 0}
+                tone="attack"
+                title={
+                  !raiderId
+                    ? 'Pick the raider first'
+                    : touchedCount === 0
+                      ? 'Touch + Defender self-out — pick every defender involved (touched + self-exited). Attack +N, all marked OUT.'
+                      : `Touch + Def self-out — ${touchedCount} defender(s) marked OUT (mix of touches + self-outs). Attack +${touchedCount}.`
+                }
+                staged={pendingAction?.label === 'T+DSO'}
               />
               <ActionBtn
                 icon={<Sparkles />}
@@ -1803,6 +1864,14 @@ const PRIMARY_ACTION_DOCS: ActionDoc[] = [
     description:
       'Touch + Bonus on the same raid: N touches scored AND bonus line crossed. Touched defenders OUT.',
     selection: 'Raider + 1+ defenders touched',
+    tone: 'attack',
+  },
+  {
+    label: 'T+DSO',
+    scoring: 'Attack +N',
+    description:
+      'Touch + Defender self-out on the same raid: raider touched some defenders AND one or more others voluntarily stepped off the mat. All selected defenders go OUT, attackers revive N. Per-defender split (touched vs self-out) isn’t broken out at the event level — the event is logged with reason "touch_plus_defender_self_out".',
+    selection: 'Raider + 1+ defenders (touched + self-out, all combined)',
     tone: 'attack',
   },
   {
