@@ -71,17 +71,15 @@ export default async function OverlayPage({
       .limit(1),
   ]);
 
-  const stateById = new Map<string, string>(
-    (statesRes.data ?? []).map((s) => [s.player_id, s.state]),
-  );
-
+  // Build slots from EVERY match_player_state row for the team (not just
+  // the original starting 7) so a substitute who's been subbed in shows
+  // up correctly. Mirrors the scoring console's slot logic so the dot
+  // strip in the broadcast overlay matches the operator's view.
+  void lineupsRes;
   function buildSlots(teamId: string) {
-    const lineup = lineupsRes.data?.find((l) => l.team_id === teamId);
-    const ids = (lineup?.starting_player_ids ?? []) as string[];
-    return ids.map((playerId) => ({
-      playerId,
-      state: stateById.get(playerId) ?? 'on_mat',
-    }));
+    return (statesRes.data ?? [])
+      .filter((s) => s.team_id === teamId)
+      .map((s) => ({ playerId: s.player_id, state: s.state }));
   }
 
   // Fetch every rostered player for both teams in one go — gives the client

@@ -248,6 +248,9 @@ export function OverlayStrip({
         },
       )
       // Slot dots — any state change (out, revival, sub, suspension) refreshes.
+      // Rebuild the slot list from scratch (rather than mapping over the
+      // previous list) so that substitutions — which add a previously-
+      // bench player to the on-mat pool — show up in the dot strip.
       .on(
         'postgres_changes',
         {
@@ -262,12 +265,15 @@ export function OverlayStrip({
             .select('player_id, team_id, state')
             .eq('match_id', matchId);
           if (!data) return;
-          const stateById = new Map(data.map((s) => [s.player_id, s.state]));
-          setHomeSlots((prev) =>
-            prev.map((s) => ({ ...s, state: stateById.get(s.playerId) ?? s.state })),
+          setHomeSlots(
+            data
+              .filter((s) => s.team_id === home.id)
+              .map((s) => ({ playerId: s.player_id, state: s.state })),
           );
-          setAwaySlots((prev) =>
-            prev.map((s) => ({ ...s, state: stateById.get(s.playerId) ?? s.state })),
+          setAwaySlots(
+            data
+              .filter((s) => s.team_id === away.id)
+              .map((s) => ({ playerId: s.player_id, state: s.state })),
           );
         },
       )
@@ -536,15 +542,12 @@ function TeamSide({
 }
 
 function SlotDots({ slots, align }: { slots: SlotRef[]; align: 'left' | 'right' }) {
-  // Mirror the public live page: bench / red-carded players are not shown.
-  // Suspended count as out (red) so the broadcast strip stays a clean
-  // green / red pair as the user requested.
+  // Match the scoring console's filter: bench players sit out (excluded),
+  // red-carded players are removed for the rest of the match (excluded).
+  // Suspended counts as red (briefly out for a yellow-card 2-min). Keeps
+  // the X/Y count consistent across overlay + scoring console.
   const active = slots.filter(
-    (s) =>
-      s.state === 'on_mat' ||
-      s.state === 'out' ||
-      s.state === 'suspended' ||
-      s.state === 'red_carded',
+    (s) => s.state === 'on_mat' || s.state === 'out' || s.state === 'suspended',
   );
   if (active.length === 0) return null;
   const onMatCount = active.filter((s) => s.state === 'on_mat').length;
