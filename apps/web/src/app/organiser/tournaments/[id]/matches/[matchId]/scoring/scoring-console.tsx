@@ -102,6 +102,9 @@ interface InitialState {
   /** Persisted in-progress raid — restored on refresh. */
   currentRaiderId: string | null;
   currentAttackingTeamId: string | null;
+  /** Remaining seconds on the persisted raid timer (0 if no active raid).
+   *  Lets a refresh resume the 30s clock from where it was. */
+  raidSecondsLeft: number;
   /** Empty-raid streak per team. 2 means the next raid is do-or-die. */
   homeDodCounter: number;
   awayDodCounter: number;
@@ -334,9 +337,14 @@ export function ScoringConsole({
   // is server-restored above). Half-time / scheduled / completed
   // start paused as expected.
   const [running, setRunning] = React.useState(initial.status === 'live');
-  // Raid timer: counts DOWN from RAID_SECONDS to 0.
-  const [raidLeft, setRaidLeft] = React.useState(0);
-  const [raidRunning, setRaidRunning] = React.useState(false);
+  // Raid timer: counts DOWN from RAID_SECONDS to 0. Initialised from
+  // the persisted raid_seconds_left so a page refresh during an active
+  // raid resumes the 30s clock from where it was (instead of arming
+  // fresh at 30s every refresh).
+  const [raidLeft, setRaidLeft] = React.useState(initial.raidSecondsLeft);
+  const [raidRunning, setRaidRunning] = React.useState(
+    initial.raidSecondsLeft > 0 && initial.currentRaiderId !== null,
+  );
   // Restore the in-progress raid from the persisted match row so a refresh
   // keeps the raider/team selection intact.
   const [attackingId, setAttackingId] = React.useState(
@@ -596,6 +604,10 @@ export function ScoringConsole({
       currentHalf: half,
       currentRaiderId: raiderId,
       currentAttackingTeamId: raiderId ? attackingId : null,
+      // When picking a raider, snapshot the soon-to-be-armed 30s so a
+      // refresh in the gap before the next 5s flush still shows a
+      // sensible raid timer. When clearing the raider, persist 0.
+      raidSecondsLeft: raiderId ? RAID_SECONDS : 0,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [raiderId]);
@@ -606,10 +618,12 @@ export function ScoringConsole({
   // every tick.
   const clockRef = React.useRef(clock);
   const halfRef = React.useRef(half);
+  const raidLeftRef = React.useRef(raidLeft);
   React.useEffect(() => {
     clockRef.current = clock;
     halfRef.current = half;
-  }, [clock, half]);
+    raidLeftRef.current = raidLeft;
+  }, [clock, half, raidLeft]);
   React.useEffect(() => {
     if (!running) return;
     const id = setInterval(() => {
@@ -619,6 +633,7 @@ export function ScoringConsole({
         currentHalf: halfRef.current,
         currentRaiderId: raiderId,
         currentAttackingTeamId: raiderId ? attackingId : null,
+        raidSecondsLeft: raidLeftRef.current,
       });
     }, 5000);
     return () => clearInterval(id);
@@ -629,7 +644,16 @@ export function ScoringConsole({
   // fresh if there isn't already an active raid (don't restart mid-raid if the
   // operator changes their mind about who's raiding). The global match clock
   // is resumed whenever it's paused — picking a raider implies the match is on.
+  // Skips the first mount so a refresh that restored a persisted
+  // raidSecondsLeft of 0 (e.g. raid time expired but the operator
+  // hasn't committed yet) doesn't get reset to 30s — the operator
+  // sees the expired-banner instead.
+  const skipFirstAutoStart = React.useRef(true);
   React.useEffect(() => {
+    if (skipFirstAutoStart.current) {
+      skipFirstAutoStart.current = false;
+      return;
+    }
     if (!raiderId || !isLive) return;
     primeAudio();
     if (!running) setRunning(true);

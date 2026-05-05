@@ -178,16 +178,24 @@ export async function persistTimerStateAction(input: {
   currentHalf: number;
   currentRaiderId: string | null;
   currentAttackingTeamId: string | null;
+  /** Optional — remaining seconds on the in-progress raid clock.
+   *  Omit (or pass 0) when no raid is active. Survives page refresh
+   *  via matches.raid_seconds_left (added in migration 0017). */
+  raidSecondsLeft?: number;
 }) {
   const supabase = await createClient();
+  const update: Record<string, unknown> = {
+    clock_seconds: input.clockSeconds,
+    current_half: input.currentHalf,
+    current_raider_id: input.currentRaiderId,
+    current_attacking_team_id: input.currentAttackingTeamId,
+  };
+  if (input.raidSecondsLeft !== undefined) {
+    update.raid_seconds_left = input.raidSecondsLeft;
+  }
   const { error } = await supabase
     .from('matches')
-    .update({
-      clock_seconds: input.clockSeconds,
-      current_half: input.currentHalf,
-      current_raider_id: input.currentRaiderId,
-      current_attacking_team_id: input.currentAttackingTeamId,
-    })
+    .update(update)
     .eq('id', input.matchId);
   if (error) return { error: error.message };
   return { ok: true };

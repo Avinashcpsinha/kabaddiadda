@@ -19,7 +19,7 @@ export default async function ScoringPage({
   const { data: match } = await supabase
     .from('matches')
     .select(
-      'id, scheduled_at, status, round, home_score, away_score, current_half, clock_seconds, current_raider_id, current_attacking_team_id, home_dod_counter, away_dod_counter, home_reviews_used, away_reviews_used, home_timeouts_used, away_timeouts_used, home_team:home_team_id(id, name, short_name, primary_color), away_team:away_team_id(id, name, short_name, primary_color)',
+      'id, scheduled_at, status, round, home_score, away_score, current_half, clock_seconds, current_raider_id, current_attacking_team_id, raid_seconds_left, home_dod_counter, away_dod_counter, home_reviews_used, away_reviews_used, home_timeouts_used, away_timeouts_used, home_team:home_team_id(id, name, short_name, primary_color), away_team:away_team_id(id, name, short_name, primary_color)',
     )
     .eq('id', matchId)
     .eq('tenant_id', user!.tenantId!)
@@ -201,6 +201,7 @@ export default async function ScoringPage({
           clockSeconds: match.clock_seconds,
           currentRaiderId: match.current_raider_id ?? null,
           currentAttackingTeamId: match.current_attacking_team_id ?? null,
+          raidSecondsLeft: match.raid_seconds_left ?? 0,
           homeDodCounter: match.home_dod_counter ?? 0,
           awayDodCounter: match.away_dod_counter ?? 0,
           homeReviewsUsed: match.home_reviews_used ?? 0,
