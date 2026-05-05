@@ -329,7 +329,11 @@ export function ScoringConsole({
   const [clock, setClock] = React.useState(
     initial.status === 'scheduled' ? 0 : initial.clockSeconds,
   );
-  const [running, setRunning] = React.useState(false);
+  // Initialise running from the persisted match status so a refresh
+  // during a live match keeps the global clock ticking (clock_seconds
+  // is server-restored above). Half-time / scheduled / completed
+  // start paused as expected.
+  const [running, setRunning] = React.useState(initial.status === 'live');
   // Raid timer: counts DOWN from RAID_SECONDS to 0.
   const [raidLeft, setRaidLeft] = React.useState(0);
   const [raidRunning, setRaidRunning] = React.useState(false);
@@ -556,7 +560,15 @@ export function ScoringConsole({
   // the raider is cleared.)
 
   // Reset raider + touched defenders when the attacking team flips.
+  // Skip the first mount so a page refresh — which always fires this
+  // effect once with the just-set initial attackingId — doesn't wipe
+  // the server-restored raider out from under us.
+  const skipFirstAttackingFlip = React.useRef(true);
   React.useEffect(() => {
+    if (skipFirstAttackingFlip.current) {
+      skipFirstAttackingFlip.current = false;
+      return;
+    }
     setRaiderId(null);
     setTouchedDefenderIds([]);
   }, [attackingId]);
