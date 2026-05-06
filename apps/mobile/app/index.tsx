@@ -1,47 +1,75 @@
-import { Link } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Link, useRouter } from 'expo-router';
+import { useEffect } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { useSession } from '../src/lib/use-session';
 import { theme } from '../src/theme';
 
+// Landing screen — splash + entry points. If a session is already
+// stored on this device, route to the right next screen automatically:
+//   • signed-in & has tenant     → /organiser dashboard
+//   • signed-in & no tenant yet  → /setup
+//   • not signed in              → render the sign-in / sign-up CTAs
 export default function HomeScreen() {
+  const router = useRouter();
+  const { loading, user } = useSession();
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user) return;
+    if (user.tenantId) router.replace('/organiser');
+    else router.replace('/setup');
+  }, [loading, user, router]);
+
+  if (loading || user) {
+    // user is non-null here only briefly while the redirect is queued —
+    // the spinner avoids flashing the marketing copy at someone who's
+    // already signed in.
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={theme.colors.primary} />
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ padding: theme.spacing.lg }}>
       <View style={styles.hero}>
         <Text style={styles.kicker}>KABADDIADDA</Text>
-        <Text style={styles.title}>The home of Kabaddi.</Text>
+        <Text style={styles.title}>Run your league from your pocket.</Text>
         <Text style={styles.subtitle}>
-          Live scores, fixtures, players, and tournaments — all in one app.
+          Set up tournaments, manage teams, score live matches, and broadcast — all from your phone.
         </Text>
       </View>
 
-      <View style={styles.liveCard}>
-        <View style={styles.liveHeader}>
-          <View style={styles.liveDot} />
-          <Text style={styles.liveText}>LIVE · Q3 · 4:02</Text>
-        </View>
-        <View style={styles.scoreRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.teamName}>Bengal Warriors</Text>
-            <Text style={styles.score}>34</Text>
-          </View>
-          <View style={{ flex: 1, alignItems: 'flex-end' }}>
-            <Text style={styles.teamName}>Patna Pirates</Text>
-            <Text style={[styles.score, { color: theme.colors.primary }]}>28</Text>
-          </View>
-        </View>
-        <View style={styles.eventBox}>
-          <Text style={styles.eventTitle}>Pawan Sehrawat</Text>
-          <Text style={styles.eventBody}>3-point Super Raid · just now</Text>
-        </View>
+      <View style={styles.previewCard}>
+        <Text style={styles.previewKicker}>PREVIEW</Text>
+        <Text style={styles.previewTitle}>Live scoring console</Text>
+        <Text style={styles.previewBody}>
+          Tap below to play with the scoring UI. No sign-in needed — uses dummy team rosters so you
+          can try the flow before you hook up your league.
+        </Text>
+        <Link href="/scoring" asChild>
+          <Pressable style={styles.previewBtn}>
+            <Text style={styles.previewBtnText}>Open scoring console</Text>
+          </Pressable>
+        </Link>
       </View>
 
-      <Link href="/scoring" asChild>
+      <Link href="/(auth)/signup" asChild>
         <Pressable style={styles.cta}>
-          <Text style={styles.ctaText}>Open scoring console (preview)</Text>
+          <Text style={styles.ctaText}>Create organiser account</Text>
         </Pressable>
       </Link>
       <Link href="/(auth)/login" asChild>
-        <Pressable style={[styles.cta, { backgroundColor: theme.colors.bgElevated, borderWidth: 1, borderColor: theme.colors.border, marginTop: theme.spacing.sm }]}>
-          <Text style={[styles.ctaText, { color: theme.colors.text }]}>Sign in</Text>
+        <Pressable style={styles.ctaGhost}>
+          <Text style={styles.ctaGhostText}>I already have an account</Text>
         </Pressable>
       </Link>
     </ScrollView>
@@ -50,6 +78,7 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.bg },
+  center: { flex: 1, backgroundColor: theme.colors.bg, alignItems: 'center', justifyContent: 'center' },
   hero: { paddingTop: theme.spacing.xxl, paddingBottom: theme.spacing.xl },
   kicker: {
     color: theme.colors.primary,
@@ -58,47 +87,54 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginBottom: theme.spacing.sm,
   },
-  title: {
-    color: theme.colors.text,
-    fontSize: theme.font.h1,
-    fontWeight: '800',
-    lineHeight: 38,
-  },
+  title: { color: theme.colors.text, fontSize: theme.font.h1, fontWeight: '800', lineHeight: 38 },
   subtitle: {
     color: theme.colors.textMuted,
     fontSize: theme.font.body,
     marginTop: theme.spacing.md,
     lineHeight: 22,
   },
-  liveCard: {
+  previewCard: {
     backgroundColor: theme.colors.bgElevated,
     borderRadius: theme.radius.lg,
     borderWidth: 1,
     borderColor: theme.colors.border,
     padding: theme.spacing.lg,
-    marginVertical: theme.spacing.lg,
+    marginBottom: theme.spacing.xl,
+    gap: 6,
   },
-  liveHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.danger },
-  liveText: { color: theme.colors.danger, fontSize: theme.font.small, fontWeight: '700' },
-  scoreRow: { flexDirection: 'row', marginTop: theme.spacing.lg },
-  teamName: { color: theme.colors.textMuted, fontSize: theme.font.small },
-  score: { color: theme.colors.text, fontSize: 48, fontWeight: '800', marginTop: 4 },
-  eventBox: {
-    marginTop: theme.spacing.lg,
-    padding: theme.spacing.md,
-    borderRadius: theme.radius.md,
+  previewKicker: { color: theme.colors.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 1.5 },
+  previewTitle: { color: theme.colors.text, fontSize: theme.font.h3, fontWeight: '800', marginTop: 4 },
+  previewBody: {
+    color: theme.colors.textMuted,
+    fontSize: theme.font.small,
+    lineHeight: 20,
+    marginVertical: theme.spacing.sm,
+  },
+  previewBtn: {
     backgroundColor: theme.colors.bg,
     borderWidth: 1,
     borderColor: theme.colors.border,
+    padding: theme.spacing.md,
+    borderRadius: theme.radius.md,
+    alignItems: 'center',
+    marginTop: theme.spacing.sm,
   },
-  eventTitle: { color: theme.colors.text, fontWeight: '700' },
-  eventBody: { color: theme.colors.textMuted, fontSize: theme.font.small, marginTop: 2 },
+  previewBtnText: { color: theme.colors.text, fontWeight: '700', fontSize: theme.font.small },
   cta: {
     backgroundColor: theme.colors.primary,
     padding: theme.spacing.lg,
     borderRadius: theme.radius.md,
     alignItems: 'center',
   },
-  ctaText: { color: '#fff', fontWeight: '700', fontSize: theme.font.body },
+  ctaText: { color: '#fff', fontWeight: '800', fontSize: theme.font.body },
+  ctaGhost: {
+    padding: theme.spacing.lg,
+    borderRadius: theme.radius.md,
+    alignItems: 'center',
+    marginTop: theme.spacing.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  ctaGhostText: { color: theme.colors.text, fontWeight: '700', fontSize: theme.font.body },
 });
