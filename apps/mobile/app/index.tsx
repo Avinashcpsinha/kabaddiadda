@@ -2,18 +2,36 @@ import { Link, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import {
   ActivityIndicator,
+  Dimensions,
+  Image,
+  ImageBackground,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSession } from '../src/lib/use-session';
 import { theme } from '../src/theme';
 
-// Marketing landing — the very first thing a visitor sees. Auth-aware:
-// if a session is already cached on this device we skip past it
-// straight to /organiser (or /setup if their tenant isn't created yet).
+// Background photos sourced from Unsplash (free license, no attribution
+// required for use). Swap any of these URLs for your own brand artwork
+// when you have it — the layout is photo-agnostic, it just expects a
+// portrait-ish image at any resolution.
+const HERO_IMAGE =
+  'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=1200&q=80&auto=format&fit=crop';
+const ACTION_IMAGE_1 =
+  'https://images.unsplash.com/photo-1546519638-68e109498ffc?w=600&q=80&auto=format&fit=crop';
+const ACTION_IMAGE_2 =
+  'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=600&q=80&auto=format&fit=crop';
+
+const { width: SCREEN_W } = Dimensions.get('window');
+
+// Marketing landing — full-bleed cinematic hero with stadium photo +
+// gradient overlay, then the value prop, feature highlights, CTAs, and a
+// scoring console preview link. Auth-aware: signed-in users skip past
+// it to /organiser (or /setup if they haven't created a tenant yet).
 export default function HomeScreen() {
   const router = useRouter();
   const { loading, user } = useSession();
@@ -39,31 +57,67 @@ export default function HomeScreen() {
       contentContainerStyle={styles.scrollWrap}
       showsVerticalScrollIndicator={false}
     >
-      {/* Top decorative band */}
-      <View style={styles.glow} />
+      {/* HERO — full-bleed photo + gradient + headline */}
+      <ImageBackground source={{ uri: HERO_IMAGE }} style={styles.hero} resizeMode="cover">
+        <LinearGradient
+          colors={[theme.colors.bg + 'cc', theme.colors.bg + '88', theme.colors.bg]}
+          style={styles.heroOverlay}
+          locations={[0, 0.55, 1]}
+        />
+        <LinearGradient
+          colors={[theme.colors.primary + '00', theme.colors.primary + '33']}
+          style={styles.heroAccent}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
 
-      {/* LOGO + WORDMARK */}
-      <View style={styles.logoBlock}>
-        <View style={styles.logoBadge}>
-          <Text style={styles.logoBadgeText}>K</Text>
-        </View>
-        <Text style={styles.wordmark}>KABADDIADDA</Text>
-        <View style={styles.liveDot}>
-          <View style={styles.liveDotInner} />
-          <Text style={styles.liveDotText}>LIVE PLATFORM</Text>
-        </View>
-      </View>
+        <View style={styles.heroContent}>
+          <View style={styles.logoBlock}>
+            <View style={styles.logoBadge}>
+              <Text style={styles.logoBadgeText}>K</Text>
+            </View>
+            <Text style={styles.wordmark}>KABADDIADDA</Text>
+            <View style={styles.liveDot}>
+              <View style={styles.liveDotInner} />
+              <Text style={styles.liveDotText}>LIVE PLATFORM</Text>
+            </View>
+          </View>
 
-      {/* HERO */}
-      <View style={styles.hero}>
-        <Text style={styles.heroTitle}>Welcome to Kabaddiadda.</Text>
-        <Text style={styles.heroSub}>
-          Start your tournament today. Score live matches, broadcast to YouTube, and let fans follow
-          every raid in real time.
-        </Text>
+          <Text style={styles.heroTitle}>
+            Welcome to <Text style={styles.heroTitleAccent}>Kabaddiadda</Text>.
+          </Text>
+          <Text style={styles.heroSub}>
+            Start your tournament today. Score live matches, broadcast to YouTube, and let fans follow
+            every raid in real time.
+          </Text>
+
+          <View style={styles.statRow}>
+            <Stat value="120s" label="raid clock" />
+            <View style={styles.statDivider} />
+            <Stat value="7v7" label="on the mat" />
+            <View style={styles.statDivider} />
+            <Stat value="∞" label="tournaments" />
+          </View>
+        </View>
+      </ImageBackground>
+
+      {/* CTAs — pulled up so they sit just under the hero photo */}
+      <View style={styles.ctaBlock}>
+        <Link href="/(auth)/signup" asChild>
+          <Pressable style={styles.ctaPrimary}>
+            <Text style={styles.ctaPrimaryText}>Create organiser account</Text>
+            <Text style={styles.ctaPrimaryHint}>Free · 2 minutes · no card needed</Text>
+          </Pressable>
+        </Link>
+        <Link href="/(auth)/login" asChild>
+          <Pressable style={styles.ctaGhost}>
+            <Text style={styles.ctaGhostText}>I already have an account</Text>
+          </Pressable>
+        </Link>
       </View>
 
       {/* FEATURE STRIP */}
+      <Text style={styles.sectionKicker}>WHAT YOU GET</Text>
       <View style={styles.featureGrid}>
         <Feature
           icon="⚡"
@@ -82,29 +136,25 @@ export default function HomeScreen() {
         />
         <Feature
           icon="📲"
-          title="Run from anywhere"
-          body="Manage rosters, lock lineups, end matches — all from your phone."
+          title="From your phone"
+          body="Manage rosters, lock lineups, end matches — all from this app."
         />
       </View>
 
-      {/* CTAs */}
-      <View style={styles.ctaBlock}>
-        <Link href="/(auth)/signup" asChild>
-          <Pressable style={styles.ctaPrimary}>
-            <Text style={styles.ctaPrimaryText}>Create organiser account</Text>
-            <Text style={styles.ctaPrimaryHint}>Free · 2 minutes · no card needed</Text>
-          </Pressable>
-        </Link>
-
-        <Link href="/(auth)/login" asChild>
-          <Pressable style={styles.ctaGhost}>
-            <Text style={styles.ctaGhostText}>I already have an account</Text>
-          </Pressable>
-        </Link>
+      {/* SHOWCASE — duo of action photos */}
+      <View style={styles.showcase}>
+        <Image source={{ uri: ACTION_IMAGE_1 }} style={styles.showcaseImg} />
+        <Image source={{ uri: ACTION_IMAGE_2 }} style={styles.showcaseImg} />
       </View>
 
       {/* PREVIEW CARD */}
       <View style={styles.previewCard}>
+        <LinearGradient
+          colors={[theme.colors.primary + '22', theme.colors.primary + '00']}
+          style={StyleSheet.absoluteFillObject}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
         <Text style={styles.previewKicker}>WANT TO SEE FIRST?</Text>
         <Text style={styles.previewTitle}>Try the live scoring console</Text>
         <Text style={styles.previewBody}>
@@ -134,52 +184,54 @@ function Feature({ icon, title, body }: { icon: string; title: string; body: str
   );
 }
 
+function Stat({ value, label }: { value: string; label: string }) {
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.bg },
   center: { flex: 1, backgroundColor: theme.colors.bg, alignItems: 'center', justifyContent: 'center' },
   scrollWrap: { paddingBottom: 48 },
 
-  // Subtle orange glow band at the top — gives the screen warmth without
-  // needing an image asset.
-  glow: {
-    position: 'absolute',
-    top: 0,
-    left: -80,
-    right: -80,
-    height: 360,
-    backgroundColor: theme.colors.primary,
-    opacity: 0.08,
-    borderBottomLeftRadius: 200,
-    borderBottomRightRadius: 200,
+  // HERO
+  hero: {
+    width: SCREEN_W,
+    minHeight: 580,
+    justifyContent: 'flex-end',
+    backgroundColor: theme.colors.bg,
   },
-
-  // Logo block
-  logoBlock: {
-    alignItems: 'center',
-    paddingTop: theme.spacing.xxl + 24,
-    paddingBottom: theme.spacing.lg,
-    gap: theme.spacing.sm,
+  heroOverlay: { ...StyleSheet.absoluteFillObject },
+  heroAccent: { ...StyleSheet.absoluteFillObject },
+  heroContent: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.xxl + 32,
+    paddingBottom: theme.spacing.xl,
   },
+  logoBlock: { alignItems: 'flex-start', gap: theme.spacing.sm, marginBottom: theme.spacing.xl },
   logoBadge: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
+    width: 56,
+    height: 56,
+    borderRadius: 16,
     backgroundColor: theme.colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: theme.colors.primary,
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
+    elevation: 10,
   },
-  logoBadgeText: { color: '#fff', fontSize: 32, fontWeight: '900' },
+  logoBadgeText: { color: '#fff', fontSize: 28, fontWeight: '900' },
   wordmark: {
     color: theme.colors.text,
-    fontSize: theme.font.h3,
+    fontSize: theme.font.body,
     fontWeight: '900',
     letterSpacing: 4,
-    marginTop: theme.spacing.xs,
   },
   liveDot: {
     flexDirection: 'row',
@@ -191,31 +243,79 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.success + '22',
     borderWidth: 1,
     borderColor: theme.colors.success + '55',
-    marginTop: 4,
   },
   liveDotInner: { width: 6, height: 6, borderRadius: 3, backgroundColor: theme.colors.success },
   liveDotText: { color: theme.colors.success, fontSize: 9, fontWeight: '800', letterSpacing: 1 },
 
-  // Hero
-  hero: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.lg,
-    alignItems: 'center',
-  },
   heroTitle: {
     color: theme.colors.text,
-    fontSize: 32,
-    fontWeight: '800',
-    textAlign: 'center',
-    lineHeight: 38,
+    fontSize: 38,
+    fontWeight: '900',
+    lineHeight: 44,
+    letterSpacing: -0.5,
   },
+  heroTitleAccent: { color: theme.colors.primary },
   heroSub: {
     color: theme.colors.textMuted,
     fontSize: theme.font.body,
-    textAlign: 'center',
     lineHeight: 22,
     marginTop: theme.spacing.md,
-    paddingHorizontal: theme.spacing.md,
+  },
+
+  // Hero stat row
+  statRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: theme.spacing.xl,
+    backgroundColor: theme.colors.bgElevated + 'cc',
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingVertical: theme.spacing.md,
+  },
+  stat: { flex: 1, alignItems: 'center', gap: 2 },
+  statValue: { color: theme.colors.text, fontSize: theme.font.h3, fontWeight: '900' },
+  statLabel: { color: theme.colors.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 1 },
+  statDivider: { width: 1, height: 28, backgroundColor: theme.colors.border },
+
+  // CTAs
+  ctaBlock: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
+    gap: theme.spacing.sm,
+  },
+  ctaPrimary: {
+    backgroundColor: theme.colors.primary,
+    paddingVertical: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.radius.md,
+    alignItems: 'center',
+    shadowColor: theme.colors.primary,
+    shadowOpacity: 0.4,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  ctaPrimaryText: { color: '#fff', fontWeight: '800', fontSize: theme.font.body },
+  ctaPrimaryHint: { color: '#ffffffaa', fontSize: 11, marginTop: 4 },
+  ctaGhost: {
+    paddingVertical: theme.spacing.lg,
+    borderRadius: theme.radius.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  ctaGhostText: { color: theme.colors.text, fontWeight: '700', fontSize: theme.font.body },
+
+  // Section header
+  sectionKicker: {
+    color: theme.colors.primary,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 2,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.xl + 8,
+    paddingBottom: theme.spacing.sm,
   },
 
   // Feature strip
@@ -223,7 +323,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.xl,
     gap: theme.spacing.sm,
   },
   feature: {
@@ -240,34 +339,20 @@ const styles = StyleSheet.create({
   featureTitle: { color: theme.colors.text, fontSize: theme.font.small, fontWeight: '800' },
   featureBody: { color: theme.colors.textMuted, fontSize: 11, lineHeight: 16 },
 
-  // CTAs
-  ctaBlock: {
+  // Showcase image strip
+  showcase: {
+    flexDirection: 'row',
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.xl,
     gap: theme.spacing.sm,
   },
-  ctaPrimary: {
-    backgroundColor: theme.colors.primary,
-    paddingVertical: theme.spacing.lg,
-    paddingHorizontal: theme.spacing.lg,
-    borderRadius: theme.radius.md,
-    alignItems: 'center',
-    shadowColor: theme.colors.primary,
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
-  },
-  ctaPrimaryText: { color: '#fff', fontWeight: '800', fontSize: theme.font.body },
-  ctaPrimaryHint: { color: '#ffffffaa', fontSize: 11, marginTop: 4 },
-  ctaGhost: {
-    paddingVertical: theme.spacing.lg,
-    borderRadius: theme.radius.md,
-    alignItems: 'center',
+  showcaseImg: {
+    flex: 1,
+    height: 140,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
-  ctaGhostText: { color: theme.colors.text, fontWeight: '700', fontSize: theme.font.body },
 
   // Preview card
   previewCard: {
@@ -279,6 +364,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     padding: theme.spacing.lg,
     gap: 6,
+    overflow: 'hidden',
   },
   previewKicker: {
     color: theme.colors.primary,
