@@ -34,9 +34,14 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <Link href="/(auth)/login" asChild>
+      <Link href="/scoring" asChild>
         <Pressable style={styles.cta}>
-          <Text style={styles.ctaText}>Sign in</Text>
+          <Text style={styles.ctaText}>Open scoring console (preview)</Text>
+        </Pressable>
+      </Link>
+      <Link href="/(auth)/login" asChild>
+        <Pressable style={[styles.cta, { backgroundColor: theme.colors.bgElevated, borderWidth: 1, borderColor: theme.colors.border, marginTop: theme.spacing.sm }]}>
+          <Text style={[styles.ctaText, { color: theme.colors.text }]}>Sign in</Text>
         </Pressable>
       </Link>
     </ScrollView>
