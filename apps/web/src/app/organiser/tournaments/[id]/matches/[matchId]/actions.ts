@@ -203,8 +203,31 @@ export async function persistTimerStateAction(input: {
 
 export async function deleteMatchEventAction(eventId: string) {
   const supabase = await createClient();
+  // Read the event's match_id BEFORE deleting so we can replay player
+  // state afterwards. The score-update trigger already handles DELETE
+  // (apply_match_event_score) so home/away scores correct themselves,
+  // but the player-state trigger only fires on INSERT — without an
+  // explicit recompute, an outed raider/defender stays out even though
+  // the event that outed them is gone.
+  const { data: ev, error: readErr } = await supabase
+    .from('match_events')
+    .select('match_id')
+    .eq('id', eventId)
+    .maybeSingle();
+  if (readErr) return { error: readErr.message };
+  if (!ev) return { error: 'Event not found.' };
+
   const { error } = await supabase.from('match_events').delete().eq('id', eventId);
   if (error) return { error: error.message };
+
+  // Replay all remaining events to restore correct player state. The
+  // RPC initialises state from lineups then re-applies every surviving
+  // event in created_at order, so revivals + outs all settle correctly.
+  const { error: replayErr } = await supabase.rpc('recompute_match_player_state', {
+    p_match_id: ev.match_id,
+  });
+  if (replayErr) return { error: replayErr.message };
+
   return { ok: true };
 }
 

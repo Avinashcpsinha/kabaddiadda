@@ -16,6 +16,7 @@ import {
   Pause,
   Play,
   Plus,
+  RotateCcw,
   Shield,
   Sparkles,
   Square as SquareIcon,
@@ -332,11 +333,18 @@ export function ScoringConsole({
   const [clock, setClock] = React.useState(
     initial.status === 'scheduled' ? 0 : initial.clockSeconds,
   );
-  // Initialise running from the persisted match status so a refresh
-  // during a live match keeps the global clock ticking (clock_seconds
-  // is server-restored above). Half-time / scheduled / completed
-  // start paused as expected.
-  const [running, setRunning] = React.useState(initial.status === 'live');
+  // Initialise running from the persisted match status, with one
+  // exception: the "just-locked" state. After Lock & Start the match
+  // status flips to 'live' and the user lands here — we don't want the
+  // clock auto-running before they've even picked a raider. Detect that
+  // moment as status='live' AND clock_seconds=0 AND no raider, and stay
+  // paused. The auto-start-on-raider-pick effect below resumes both
+  // clocks when the first raider is selected. Mid-match refreshes still
+  // resume ticking because clock_seconds will be > 0 or a raider is set.
+  const [running, setRunning] = React.useState(
+    initial.status === 'live' &&
+      (initial.clockSeconds > 0 || initial.currentRaiderId !== null),
+  );
   // Raid timer: counts DOWN from RAID_SECONDS to 0. Initialised from
   // the persisted raid_seconds_left so a page refresh during an active
   // raid resumes the 30s clock from where it was (instead of arming
@@ -492,6 +500,19 @@ export function ScoringConsole({
   }
   function cancelPending() {
     // Cancel just discards the queue — no commit, no team flip.
+    setPendingActions([]);
+  }
+  // Referee-restart: rewind the 30s raid clock, clear defender selection
+  // and any staged actions, but keep the raider + attacking team. Used
+  // when the ref blows the whistle a few seconds in and the raid
+  // restarts. Disallowed once an action has been committed this raid
+  // (those are real DB events; the operator should Complete Raid + pick
+  // a new raid instead of trying to "restart").
+  function resetRaidTimer() {
+    if (actionsThisRaid > 0) return;
+    setRaidLeft(RAID_SECONDS);
+    setRaidRunning(true);
+    setTouchedDefenderIds([]);
     setPendingActions([]);
   }
   // Operator-driven Complete Raid with no staged action. Used by both
@@ -1162,14 +1183,29 @@ export function ScoringConsole({
               >
                 {raidLeft.toString().padStart(2, '0')}
               </div>
-              {/* No manual raid Start / Pause / Resume / Reset buttons.
-                  The raid clock auto-arms when a raider is picked and
-                  auto-resets when the raid ends or the raider is
-                  cleared. The global match Pause / Resume buttons
-                  cascade to the raid clock via the interval coupling
-                  (raid only ticks while running && raidRunning &&
-                  raiderId), so global Resume with no raider on the mat
-                  starts only the match clock. */}
+              {/* Reset button — for when the referee stops a raider
+                  shortly after the raid begins and orders a restart.
+                  Resets the 30s clock, clears defender selection +
+                  pending action queue, and leaves the raider on the
+                  picker. Disabled once any action has been committed
+                  this raid — at that point Complete Raid + new pick is
+                  the right path. Hidden entirely without a raider.  */}
+              {raiderId && (
+                <button
+                  type="button"
+                  onClick={resetRaidTimer}
+                  disabled={actionsThisRaid > 0}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="Reset raid timer"
+                  title={
+                    actionsThisRaid > 0
+                      ? 'Cannot reset — actions already committed this raid. Use Complete Raid then pick a new raid.'
+                      : 'Reset raid clock to 30s (referee restart)'
+                  }
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
 
             {/* Match controls */}

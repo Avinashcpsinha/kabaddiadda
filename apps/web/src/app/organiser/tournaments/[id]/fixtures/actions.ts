@@ -101,9 +101,74 @@ export async function autoGenerateRoundRobinAction(tournamentId: string, startIs
 }
 
 export async function deleteMatchAction(tournamentId: string, matchId: string) {
+  const user = await getSessionUser();
+  if (!user?.tenantId) return { error: 'Not authorised' };
+
   const supabase = await createClient();
+  // Only allow deleting scheduled matches — once a match is live or
+  // completed, deleting it would orphan match_events / lineups / state
+  // rows and tear down on-air UI for anyone watching.
+  const { data: match, error: readErr } = await supabase
+    .from('matches')
+    .select('id, status')
+    .eq('id', matchId)
+    .eq('tenant_id', user.tenantId)
+    .maybeSingle();
+  if (readErr) return { error: readErr.message };
+  if (!match) return { error: 'Match not found.' };
+  if (match.status !== 'scheduled') {
+    return { error: 'Only scheduled fixtures can be deleted.' };
+  }
+
   const { error } = await supabase.from('matches').delete().eq('id', matchId);
   if (error) return { error: error.message };
   revalidatePath(`/organiser/tournaments/${tournamentId}/fixtures`);
+  revalidatePath(`/organiser/fixtures`);
+  return { ok: true };
+}
+
+export async function updateMatchAction(
+  tournamentId: string,
+  matchId: string,
+  formData: FormData,
+) {
+  const user = await getSessionUser();
+  if (!user?.tenantId) return { error: 'Not authorised' };
+
+  const supabase = await createClient();
+  const { data: match, error: readErr } = await supabase
+    .from('matches')
+    .select('id, status')
+    .eq('id', matchId)
+    .eq('tenant_id', user.tenantId)
+    .maybeSingle();
+  if (readErr) return { error: readErr.message };
+  if (!match) return { error: 'Match not found.' };
+  if (match.status !== 'scheduled') {
+    return { error: 'Only scheduled fixtures can be edited.' };
+  }
+
+  const home = String(formData.get('homeTeamId') ?? '');
+  const away = String(formData.get('awayTeamId') ?? '');
+  const scheduledAt = String(formData.get('scheduledAt') ?? '');
+  const round = String(formData.get('round') ?? '').trim() || null;
+
+  if (!home || !away) return { error: 'Pick both teams' };
+  if (home === away) return { error: 'A team cannot play itself' };
+  if (!scheduledAt) return { error: 'Pick a date and time' };
+
+  const { error } = await supabase
+    .from('matches')
+    .update({
+      home_team_id: home,
+      away_team_id: away,
+      scheduled_at: new Date(scheduledAt).toISOString(),
+      round,
+    })
+    .eq('id', matchId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/organiser/tournaments/${tournamentId}/fixtures`);
+  revalidatePath(`/organiser/fixtures`);
   return { ok: true };
 }

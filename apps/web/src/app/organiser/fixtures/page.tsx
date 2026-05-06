@@ -8,6 +8,7 @@ import { getSessionUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { initials } from '@/lib/utils';
 import { AddFixtureModal } from './add-fixture-modal';
+import { FixtureActions } from './fixture-actions';
 
 export const metadata = { title: 'Fixtures' };
 
@@ -35,7 +36,7 @@ export default async function FixturesPage({
   let query = supabase
     .from('matches')
     .select(
-      `id, scheduled_at, status, round, home_score, away_score, current_half, clock_seconds, tournament_id,
+      `id, scheduled_at, status, round, home_score, away_score, current_half, clock_seconds, tournament_id, home_team_id, away_team_id,
        home_team:home_team_id(id, name, short_name, primary_color),
        away_team:away_team_id(id, name, short_name, primary_color),
        tournament:tournament_id(name)`,
@@ -278,7 +279,7 @@ function TournamentAccordion({
       ) : (
         <div className="space-y-2 border-t border-border/40 p-3">
           {matches.map((m) => (
-            <FixtureRow key={m.id} match={m} />
+            <FixtureRow key={m.id} match={m} teams={teams} />
           ))}
         </div>
       )}
@@ -296,18 +297,27 @@ interface MatchRow {
   current_half: number;
   clock_seconds: number;
   tournament_id: string;
+  home_team_id: string;
+  away_team_id: string;
   home_team: { id: string; name: string; short_name: string | null; primary_color: string | null } | null;
   away_team: { id: string; name: string; short_name: string | null; primary_color: string | null } | null;
   tournament: { name: string | null } | null;
 }
 
-function FixtureRow({ match: m }: { match: unknown }) {
+function FixtureRow({
+  match: m,
+  teams,
+}: {
+  match: unknown;
+  teams: Array<{ id: string; name: string; short_name: string | null }>;
+}) {
   const match = m as MatchRow;
   const home = match.home_team;
   const away = match.away_team;
   if (!home || !away) return null;
 
   const isLive = match.status === 'live' || match.status === 'half_time';
+  const isScheduled = match.status === 'scheduled';
   const detailHref = `/organiser/tournaments/${match.tournament_id}/matches/${match.id}`;
   const scoreHref = `${detailHref}/scoring`;
 
@@ -365,6 +375,19 @@ function FixtureRow({ match: m }: { match: unknown }) {
                 <ExternalLink className="h-3 w-3" />
               </Link>
             </Button>
+          )}
+          {isScheduled && (
+            <FixtureActions
+              tournamentId={match.tournament_id}
+              matchId={match.id}
+              teams={teams}
+              current={{
+                homeTeamId: match.home_team_id,
+                awayTeamId: match.away_team_id,
+                scheduledAt: match.scheduled_at,
+                round: match.round,
+              }}
+            />
           )}
         </div>
       </CardContent>
