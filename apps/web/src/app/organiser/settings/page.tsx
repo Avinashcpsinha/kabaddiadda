@@ -31,6 +31,13 @@ export default async function SettingsPage({
 
   const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'kabaddiadda.com';
   const subdomainUrl = `https://${tenant?.slug}.${rootDomain}`;
+  // Path-based URL: works today on any deployment without wildcard DNS.
+  // The subdomain URL above only resolves when the deployment has a real
+  // root domain with a `*.<root>` wildcard configured (Vercel doesn't
+  // provide wildcards on `.vercel.app` URLs), so we always surface this
+  // path-based fallback so organisers have a working public link.
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
+  const pathUrl = tenant?.slug ? `${appUrl}/t/${tenant.slug}` : '';
 
   return (
     <div className="space-y-6">
@@ -110,11 +117,31 @@ export default async function SettingsPage({
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
+              <Label className="text-xs">Public page (path)</Label>
+              <a
+                href={pathUrl || `/t/${tenant?.slug ?? ''}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2 font-mono text-sm hover:border-primary/60 hover:bg-muted/50 transition-colors"
+              >
+                <span className="truncate text-foreground">
+                  {pathUrl || `/t/${tenant?.slug ?? ''}`}
+                </span>
+              </a>
+              <p className="text-[10px] text-muted-foreground">
+                Works today — share this link to send people to your league&apos;s public page.
+              </p>
+            </div>
+
+            <div className="space-y-2">
               <Label className="text-xs">Subdomain</Label>
               <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2 font-mono text-sm">
                 <span className="truncate text-foreground">{subdomainUrl}</span>
               </div>
-              <p className="text-[10px] text-muted-foreground">Always available, free.</p>
+              <p className="text-[10px] text-muted-foreground">
+                Vanity subdomain — only resolves once your platform has a wildcard root domain
+                configured. Use the path link above until then.
+              </p>
             </div>
 
             <div className="space-y-2">
