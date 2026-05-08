@@ -201,6 +201,12 @@ function Hero({
               >
                 See pricing →
               </Link>
+              <Link
+                href="/demo/organiser"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                See how it works →
+              </Link>
             </div>
 
             <div className="mt-10 grid max-w-lg grid-cols-3 gap-4 md:mt-14 md:gap-6">
