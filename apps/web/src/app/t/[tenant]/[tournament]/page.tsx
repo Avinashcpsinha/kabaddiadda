@@ -13,6 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { createClient } from '@/lib/supabase/server';
+import { effectivePlan, getPlanLimits, type PlanId, type PlanStatus } from '@/lib/billing';
 import { initials } from '@/lib/utils';
 
 const FORMAT_LABEL: Record<string, string> = {
@@ -53,7 +54,7 @@ export default async function PublicTournamentPage({
 
   const { data: tenant } = await supabase
     .from('tenants')
-    .select('id, name, slug, logo_url, branding')
+    .select('id, name, slug, logo_url, branding, plan, plan_status')
     .eq('slug', tenantSlug)
     .eq('status', 'active')
     .maybeSingle();
@@ -94,8 +95,16 @@ export default async function PublicTournamentPage({
     .filter((m) => m.status === 'completed')
     .slice(0, 10);
 
+  // Gate custom branding by plan — Free tenants render Kabaddiadda defaults.
+  const allowBranding = getPlanLimits(
+    effectivePlan(
+      (tenant.plan ?? 'free') as PlanId,
+      (tenant.plan_status ?? 'free') as PlanStatus,
+    ),
+  ).customBranding;
   const branding = (tenant.branding as { primaryColor?: string; tagline?: string } | null) ?? null;
-  const brandColor = branding?.primaryColor ?? null;
+  const brandColor = allowBranding ? (branding?.primaryColor ?? null) : null;
+  const tenantLogoUrl = allowBranding ? tenant.logo_url : null;
 
   return (
     <div
@@ -213,10 +222,10 @@ export default async function PublicTournamentPage({
               </CardHeader>
               <CardContent>
                 <div className="flex items-center gap-3">
-                  {tenant.logo_url ? (
+                  {tenantLogoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={tenant.logo_url}
+                      src={tenantLogoUrl}
                       alt={tenant.name}
                       className="h-12 w-12 rounded-lg object-cover"
                     />

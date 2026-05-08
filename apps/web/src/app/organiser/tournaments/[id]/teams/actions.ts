@@ -4,10 +4,14 @@ import { revalidatePath } from 'next/cache';
 import { teamCreateSchema } from '@kabaddiadda/shared';
 import { createClient } from '@/lib/supabase/server';
 import { getSessionUser } from '@/lib/auth';
+import { gateTeamCreate } from '@/lib/billing/gate';
 
 export async function createTeamAction(tournamentId: string, formData: FormData) {
   const user = await getSessionUser();
   if (!user?.tenantId) return { error: 'Not authorised' };
+
+  const planError = await gateTeamCreate(user.tenantId);
+  if (planError) return { error: planError };
 
   const parsed = teamCreateSchema.safeParse({
     name: String(formData.get('name') ?? '').trim(),

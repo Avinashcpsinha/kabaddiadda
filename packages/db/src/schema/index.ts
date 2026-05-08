@@ -11,3 +11,5 @@ export * from './match-events';
 export * from './match-lineups';
 export * from './match-player-state';
 export * from './audit';
+export * from './invoices';
+export * from './billing-events';

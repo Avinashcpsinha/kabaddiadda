@@ -73,3 +73,15 @@ export const playerMatchStateEnum = pgEnum('player_match_state', [
   'red_carded',
   'injured',
 ]);
+
+export const tenantPlanEnum = pgEnum('tenant_plan', ['free', 'pro', 'enterprise']);
+
+export const tenantPlanStatusEnum = pgEnum('tenant_plan_status', [
+  'free',
+  'active',
+  'trialing',
+  'past_due',
+  'cancel_at_period_end',
+  'cancelled',
+  'paused',
+]);

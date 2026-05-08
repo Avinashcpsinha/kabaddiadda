@@ -6,6 +6,7 @@ import { tournamentCreateSchema } from '@kabaddiadda/shared';
 import { createClient } from '@/lib/supabase/server';
 import { getSessionUser } from '@/lib/auth';
 import { slugify } from '@/lib/slug';
+import { gateTournamentCreate } from '@/lib/billing/gate';
 
 function readFormString(fd: FormData, key: string): string | undefined {
   const v = fd.get(key);
@@ -23,6 +24,9 @@ function readFormInt(fd: FormData, key: string): number | undefined {
 export async function createTournamentAction(formData: FormData) {
   const user = await getSessionUser();
   if (!user?.tenantId) return { error: 'You must set up a league first.' };
+
+  const planError = await gateTournamentCreate(user.tenantId);
+  if (planError) return { error: planError };
 
   const name = String(formData.get('name') ?? '').trim();
   const rawSlug = String(formData.get('slug') ?? '').trim();

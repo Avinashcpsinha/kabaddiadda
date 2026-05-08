@@ -1,5 +1,5 @@
 import { jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { tenantStatusEnum } from './enums';
+import { tenantStatusEnum, tenantPlanEnum, tenantPlanStatusEnum } from './enums';
 
 export const tenants = pgTable('tenants', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -16,6 +16,14 @@ export const tenants = pgTable('tenants', {
   ownerId: uuid('owner_id'),
   contactEmail: text('contact_email'),
   contactPhone: text('contact_phone'),
+  plan: tenantPlanEnum('plan').default('free').notNull(),
+  planStatus: tenantPlanStatusEnum('plan_status').default('free').notNull(),
+  planStartedAt: timestamp('plan_started_at', { withTimezone: true }),
+  planRenewsAt: timestamp('plan_renews_at', { withTimezone: true }),
+  planCanceledAt: timestamp('plan_canceled_at', { withTimezone: true }),
+  planProvider: text('plan_provider'),
+  planProviderCustomerId: text('plan_provider_customer_id'),
+  planProviderSubscriptionId: text('plan_provider_subscription_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });

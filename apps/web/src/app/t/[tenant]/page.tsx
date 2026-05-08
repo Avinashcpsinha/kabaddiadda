@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty';
 import { Logo } from '@/components/logo';
 import { createClient } from '@/lib/supabase/server';
+import { effectivePlan, getPlanLimits, type PlanId, type PlanStatus } from '@/lib/billing';
 
 const FORMAT_LABEL: Record<string, string> = {
   league: 'League',
@@ -47,17 +48,28 @@ export default async function PublicTenantPage({
 
   const { data: tenant } = await supabase
     .from('tenants')
-    .select('id, name, slug, logo_url, contact_email, branding')
+    .select('id, name, slug, logo_url, contact_email, branding, plan, plan_status')
     .eq('slug', slug)
     .eq('status', 'active')
     .maybeSingle();
 
   if (!tenant) notFound();
 
+  // Gate custom branding behind Pro+. Free tenants render Kabaddiadda
+  // defaults (no custom logo / colour / hero) regardless of what's saved
+  // in the DB; the values stay so they activate automatically on upgrade.
+  const allowBranding = getPlanLimits(
+    effectivePlan(
+      (tenant.plan ?? 'free') as PlanId,
+      (tenant.plan_status ?? 'free') as PlanStatus,
+    ),
+  ).customBranding;
   const branding = (tenant.branding as TenantBranding | null) ?? null;
-  const brandColor = branding?.primaryColor ?? null;
-  const heroImage = branding?.heroImageUrl ?? null;
+  const brandColor = allowBranding ? (branding?.primaryColor ?? null) : null;
+  const heroImage = allowBranding ? (branding?.heroImageUrl ?? null) : null;
+  // Tagline is fine on every plan — it's just text, not branding.
   const tagline = branding?.tagline ?? null;
+  const tenantLogoUrl = allowBranding ? tenant.logo_url : null;
 
   const { data: tournaments } = await supabase
     .from('tournaments')
@@ -106,10 +118,10 @@ export default async function PublicTenantPage({
         )}
         <div className="container relative mx-auto px-4 py-16">
           <div className="flex items-center gap-5">
-            {tenant.logo_url ? (
+            {tenantLogoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={tenant.logo_url}
+                src={tenantLogoUrl}
                 alt={tenant.name}
                 className="h-16 w-16 rounded-2xl object-cover shadow-xl ring-2 ring-background"
                 style={brandColor ? { boxShadow: `0 0 0 2px ${brandColor}33, 0 10px 30px ${brandColor}40` } : undefined}
