@@ -42,6 +42,9 @@ export async function SiteHeader() {
             <Link href="/live" className="hover:text-foreground transition-colors">
               Live
             </Link>
+            <Link href="/pricing" className="hover:text-foreground transition-colors">
+              Pricing
+            </Link>
           </nav>
         </div>
         <div className="flex items-center gap-2">
