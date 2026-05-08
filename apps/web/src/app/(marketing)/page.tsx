@@ -21,6 +21,7 @@ import { AnimatedTagline } from '@/components/animated-tagline';
 import { PhoneMockup } from '@/components/phone-mockup';
 import { getSessionUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
+import { cn } from '@/lib/utils';
 
 // Marketing home shows live matches across the platform — public, no auth.
 // /live/[matchId] is also public (not in middleware PROTECTED_PREFIXES), so
@@ -795,29 +796,198 @@ function MobileSection() {
         </div>
 
         <div className="relative">
-          <div className="mx-auto aspect-[9/16] max-w-[280px] rounded-[2.5rem] border-8 border-foreground/10 bg-background p-2 shadow-2xl shadow-primary/10">
-            <div className="relative h-full w-full overflow-hidden rounded-[2rem] bg-gradient-to-br from-secondary to-background">
-              <div className="absolute left-1/2 top-2 h-5 w-24 -translate-x-1/2 rounded-full bg-foreground/80" />
-              <div className="flex h-full flex-col p-4 pt-12">
-                <Badge variant="live" className="self-start text-[10px]">
-                  ● LIVE · Q3
-                </Badge>
-                <div className="mt-6 text-center">
-                  <div className="text-xs text-muted-foreground">Bengal Warriors</div>
-                  <div className="mt-1 text-5xl font-bold tracking-tight">34</div>
+          {/* Phone-frame mockup of the Kabaddiadda mobile live-match screen.
+              Pure CSS approximation — proportions and content match what the
+              real app renders, but every "screenshot" is hand-built. The
+              caveat note below the mockup is intentional: we don't claim it
+              is a real screenshot. Replace with an Image when an actual
+              screenshot lands in /public/mobile/. */}
+          <div
+            aria-label="Kabaddiadda mobile app — live match screen"
+            className="relative mx-auto aspect-[9/19] w-full max-w-[300px] rounded-[3rem] bg-neutral-900 p-[10px] shadow-[0_30px_80px_-20px_rgba(0,82,163,0.45)] ring-1 ring-black/40"
+          >
+            {/* Side buttons — purely cosmetic, sells the phone illusion */}
+            <div className="absolute left-[-3px] top-24 h-12 w-[3px] rounded-l-full bg-neutral-800" />
+            <div className="absolute left-[-3px] top-40 h-16 w-[3px] rounded-l-full bg-neutral-800" />
+            <div className="absolute right-[-3px] top-32 h-20 w-[3px] rounded-r-full bg-neutral-800" />
+
+            <div className="relative flex h-full w-full flex-col overflow-hidden rounded-[2.4rem] bg-background">
+              {/* Dynamic-island / camera notch */}
+              <div className="absolute left-1/2 top-2 z-20 flex h-6 w-28 -translate-x-1/2 items-center justify-center rounded-full bg-neutral-900">
+                <div className="h-1.5 w-1.5 rounded-full bg-neutral-700" />
+              </div>
+
+              {/* iOS status bar — time + signal + battery */}
+              <div className="z-10 flex items-center justify-between px-5 pt-3 text-[9px] font-semibold text-foreground">
+                <span className="font-mono">9:41</span>
+                <span className="flex items-center gap-1 opacity-80">
+                  <span className="flex items-end gap-0.5">
+                    <span className="h-1 w-0.5 rounded-sm bg-foreground" />
+                    <span className="h-1.5 w-0.5 rounded-sm bg-foreground" />
+                    <span className="h-2 w-0.5 rounded-sm bg-foreground" />
+                    <span className="h-2.5 w-0.5 rounded-sm bg-foreground" />
+                  </span>
+                  <span className="font-mono text-[8px]">5G</span>
+                  <span className="flex h-2 w-4 items-center rounded-[2px] border border-foreground/80 px-px">
+                    <span className="h-full w-full rounded-[1px] bg-foreground" />
+                  </span>
+                </span>
+              </div>
+
+              {/* App header — small Kabaddiadda wordmark + screen title */}
+              <div className="flex items-center justify-between px-4 pb-2 pt-3">
+                <div className="font-display text-[11px] uppercase tracking-[0.15em] text-foreground">
+                  Kabaddi Adda
                 </div>
-                <div className="my-3 text-center text-xs text-muted-foreground">vs</div>
-                <div className="text-center">
-                  <div className="text-xs text-muted-foreground">Patna Pirates</div>
-                  <div className="mt-1 text-5xl font-bold tracking-tight gradient-text">28</div>
-                </div>
-                <div className="mt-auto rounded-lg bg-secondary/60 p-3 text-xs">
-                  <div className="font-semibold">Pawan Sehrawat</div>
-                  <div className="text-muted-foreground">3-point Super Raid · just now</div>
+                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-muted">
+                  <span className="text-[8px] font-bold text-muted-foreground">A</span>
                 </div>
               </div>
+              <div className="border-t border-border/50" />
+
+              {/* Body — Live tab content */}
+              <div className="flex flex-1 flex-col gap-3 overflow-hidden p-3">
+                {/* LIVE pill row */}
+                <div className="flex items-center gap-2">
+                  <Badge variant="live" className="text-[9px]">
+                    ● LIVE
+                  </Badge>
+                  <span className="font-mono text-[9px] tracking-wider text-muted-foreground">
+                    Q1 · 26:57
+                  </span>
+                  <span className="ml-auto rounded-md bg-secondary px-1.5 py-0.5 font-mono text-[9px] font-semibold">
+                    RAID 09
+                  </span>
+                </div>
+
+                {/* Match card */}
+                <div className="rounded-2xl border border-border/60 bg-card p-3 shadow-sm">
+                  {/* Tournament label */}
+                  <div className="mb-2 flex items-center gap-1.5 text-[8px] uppercase tracking-wider text-muted-foreground">
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                    Pro Kabaddi Cup 2026 · Round 4
+                  </div>
+
+                  {/* Team rows */}
+                  <div className="space-y-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-primary to-[#003d7a] text-[9px] font-bold text-white shadow-sm">
+                        DBW
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[11px] font-semibold leading-tight">
+                          Darbar Warriors
+                        </div>
+                        <div className="text-[9px] text-muted-foreground">Home</div>
+                      </div>
+                      <div className="font-mono text-2xl font-bold tabular-nums">4</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-[#0ea5e9] to-[#0369a1] text-[9px] font-bold text-white shadow-sm">
+                        MSK
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[11px] font-semibold leading-tight">
+                          Maheshwari Super Kings
+                        </div>
+                        <div className="text-[9px] text-muted-foreground">Away</div>
+                      </div>
+                      <div className="font-mono text-2xl font-bold tabular-nums text-primary">
+                        7
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* On-mat dots row */}
+                  <div className="mt-3 flex items-center justify-between border-t border-border/40 pt-2 text-[9px]">
+                    <div className="flex items-center gap-1">
+                      <span className="text-muted-foreground">DBW</span>
+                      <div className="flex gap-0.5">
+                        {[1, 2, 3].map((i) => (
+                          <span key={i} className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        ))}
+                        {[1, 2, 3, 4].map((i) => (
+                          <span key={i} className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="flex gap-0.5">
+                        {[1, 2, 3, 4, 5, 6].map((i) => (
+                          <span key={i} className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        ))}
+                        <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                      </div>
+                      <span className="text-muted-foreground">MSK</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Latest action */}
+                <div className="rounded-xl border border-primary/30 bg-primary/5 p-2.5">
+                  <div className="mb-1 flex items-center gap-1.5 text-[8px] uppercase tracking-wider text-primary">
+                    <Zap className="h-2.5 w-2.5" />
+                    Latest action
+                  </div>
+                  <div className="text-[10px] font-semibold leading-tight">
+                    Pavan #9 dives in, taps Lalu #77
+                  </div>
+                  <div className="mt-0.5 text-[9px] text-muted-foreground">
+                    MSK +1 · just now
+                  </div>
+                </div>
+
+                {/* Push notification preview */}
+                <div className="mt-auto rounded-xl bg-neutral-900/95 p-2.5 text-white shadow-lg shadow-black/20">
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex h-4 w-4 items-center justify-center rounded-sm bg-primary text-[7px] font-bold">
+                      KA
+                    </div>
+                    <span className="text-[9px] font-semibold uppercase tracking-wider opacity-80">
+                      Kabaddi Adda
+                    </span>
+                    <span className="ml-auto text-[8px] opacity-50">now</span>
+                  </div>
+                  <div className="mt-1 text-[10px] font-semibold leading-tight">
+                    Super Raid! MSK 3-point sweep
+                  </div>
+                  <div className="text-[9px] opacity-70">Pavan brings home 3 — MSK 7, DBW 4</div>
+                </div>
+              </div>
+
+              {/* Bottom tab bar */}
+              <div className="flex shrink-0 items-center justify-around border-t border-border/50 bg-background/95 px-2 pb-4 pt-1.5">
+                {[
+                  { label: 'Feed', active: false },
+                  { label: 'Live', active: true },
+                  { label: 'Teams', active: false },
+                  { label: 'Profile', active: false },
+                ].map((t) => (
+                  <div
+                    key={t.label}
+                    className={cn(
+                      'flex flex-col items-center gap-0.5 px-2 py-1 text-[8px] font-medium',
+                      t.active ? 'text-primary' : 'text-muted-foreground',
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        'h-1 w-1 rounded-full',
+                        t.active ? 'bg-primary' : 'bg-muted-foreground/40',
+                      )}
+                    />
+                    {t.label}
+                  </div>
+                ))}
+              </div>
+
+              {/* Home indicator */}
+              <div className="absolute bottom-1 left-1/2 h-1 w-24 -translate-x-1/2 rounded-full bg-foreground/60" />
             </div>
           </div>
+          <p className="mt-3 text-center text-[10px] text-muted-foreground">
+            Illustrative — final UI may vary
+          </p>
         </div>
       </div>
     </section>
