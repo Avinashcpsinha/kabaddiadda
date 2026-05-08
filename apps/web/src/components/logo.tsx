@@ -1,36 +1,63 @@
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
 
-export function Logo({ className }: { className?: string }) {
+// Kabaddi Adda brand mark. Icon-only PNGs paired with a code-rendered
+// wordmark so the text adapts to light/dark themes. Two source assets:
+//   header: /public/Logo.png         (465×337, icon-only)
+//   footer: /public/Logo_footer.png  (465×337, icon-only)
+// Each variant carries its own default sizing so call sites don't need to
+// know the asset's aspect ratio. Pass `iconOnly` to hide the wordmark.
+const VARIANTS = {
+  header: {
+    src: '/Logo.png',
+    width: 465,
+    height: 337,
+    iconClass: 'h-10 w-auto',
+    textClass: 'text-xl',
+  },
+  footer: {
+    src: '/Logo_footer.png',
+    width: 465,
+    height: 337,
+    iconClass: 'h-14 w-auto',
+    textClass: 'text-2xl',
+  },
+} as const;
+
+export function Logo({
+  className,
+  priority = false,
+  variant = 'header',
+  iconOnly = false,
+}: {
+  className?: string;
+  priority?: boolean;
+  variant?: keyof typeof VARIANTS;
+  iconOnly?: boolean;
+}) {
+  const { src, width, height, iconClass, textClass } = VARIANTS[variant];
+  const icon = (
+    <Image
+      src={src}
+      alt="Kabaddi Adda"
+      width={width}
+      height={height}
+      priority={priority}
+      className={cn(iconClass, className)}
+    />
+  );
+  if (iconOnly) return icon;
   return (
-    <div className={cn('flex items-center gap-2 font-bold', className)}>
-      <div className="relative">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-orange-600 text-primary-foreground shadow-lg shadow-primary/20">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5"
-            aria-hidden
-          >
-            <path
-              d="M12 2L4 7v6c0 5 3.5 8.7 8 9 4.5-.3 8-4 8-9V7l-8-5z"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M9 12l2 2 4-4"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </div>
-      </div>
-      <span className="text-lg tracking-tight">
-        Kabaddi<span className="gradient-text">adda</span>
+    <span className="inline-flex items-center gap-3">
+      {icon}
+      <span
+        className={cn(
+          'font-display uppercase tracking-wide text-foreground',
+          textClass,
+        )}
+      >
+        Kabaddi Adda
       </span>
-    </div>
+    </span>
   );
 }

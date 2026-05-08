@@ -199,7 +199,7 @@ export default async function SettingsPage({
                 <Input
                   id="primaryColor"
                   name="primaryColor"
-                  placeholder="#f97316"
+                  placeholder="#0052a3"
                   defaultValue={primaryColor}
                   pattern="^#[0-9A-Fa-f]{6}$"
                   className="font-mono"
@@ -213,7 +213,7 @@ export default async function SettingsPage({
                 )}
               </div>
               <p className="text-[10px] text-muted-foreground">
-                Hex code (e.g. <span className="font-mono">#f97316</span>). Used for accent CTAs and
+                Hex code (e.g. <span className="font-mono">#0052a3</span>). Used for accent CTAs and
                 public-page highlights.
               </p>
             </div>

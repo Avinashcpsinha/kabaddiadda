@@ -55,6 +55,7 @@ import {
   recordSubstitutionAction,
   recordTechPointAction,
   setMatchStatusAction,
+  swapOutSeqAction,
   type EventType,
 } from '../actions';
 
@@ -119,6 +120,8 @@ export interface PlayerSlot {
   playerId: string;
   /** Current match_player_state.state — 'on_mat' / 'bench' / 'out' / 'suspended' / 'red_carded' / 'injured'. */
   state: string;
+  /** Revival queue position when OUT (lowest revives first). null otherwise. */
+  outSeq: number | null;
   fullName: string;
   jerseyNumber: number | null;
   role: string;
@@ -333,17 +336,14 @@ export function ScoringConsole({
   const [clock, setClock] = React.useState(
     initial.status === 'scheduled' ? 0 : initial.clockSeconds,
   );
-  // Initialise running from the persisted match status, with one
-  // exception: the "just-locked" state. After Lock & Start the match
-  // status flips to 'live' and the user lands here — we don't want the
-  // clock auto-running before they've even picked a raider. Detect that
-  // moment as status='live' AND clock_seconds=0 AND no raider, and stay
-  // paused. The auto-start-on-raider-pick effect below resumes both
-  // clocks when the first raider is selected. Mid-match refreshes still
-  // resume ticking because clock_seconds will be > 0 or a raider is set.
+  // Initialise running strictly from raid state: the global clock only
+  // auto-resumes on entry when a raider is actively on the mat (mid-raid
+  // refresh). Any other entry — Lock & Start, Continue scoring, between
+  // raids, half-time return — lands paused at the persisted clock value.
+  // The operator picks a raider (auto-start effect below) or hits play to
+  // resume ticking. This prevents wasted seconds while they orient.
   const [running, setRunning] = React.useState(
-    initial.status === 'live' &&
-      (initial.clockSeconds > 0 || initial.currentRaiderId !== null),
+    initial.status === 'live' && initial.currentRaiderId !== null,
   );
   // Raid timer: counts DOWN from RAID_SECONDS to 0. Initialised from
   // the persisted raid_seconds_left so a page refresh during an active
@@ -362,6 +362,11 @@ export function ScoringConsole({
     initial.currentRaiderId,
   );
   const [touchedDefenderIds, setTouchedDefenderIds] = React.useState<string[]>([]);
+  // Swap-mode lets the operator reorder the OUT revival queue. When a raider
+  // touches multiple defenders in one raid, the captured `out_seq` may not
+  // match real-life order; this lets them fix it before the next revive fires.
+  const [swapMode, setSwapMode] = React.useState(false);
+  const [swapFirstId, setSwapFirstId] = React.useState<string | null>(null);
   const [pending, startTransition] = React.useTransition();
   // Modal state for the secondary actions (cards, sub, review).
   const [openModal, setOpenModal] = React.useState<
@@ -691,6 +696,36 @@ export function ScoringConsole({
     setTouchedDefenderIds((prev) =>
       prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id],
     );
+  }
+
+  function exitSwapMode() {
+    setSwapMode(false);
+    setSwapFirstId(null);
+  }
+
+  function handleSwapTap(playerId: string) {
+    if (swapFirstId === null) {
+      setSwapFirstId(playerId);
+      return;
+    }
+    if (swapFirstId === playerId) {
+      // Tapped the same player twice — treat as cancel of the first pick.
+      setSwapFirstId(null);
+      return;
+    }
+    const a = swapFirstId;
+    const b = playerId;
+    exitSwapMode();
+    startTransition(async () => {
+      const res = await swapOutSeqAction({
+        matchId,
+        tournamentId,
+        playerAId: a,
+        playerBId: b,
+      });
+      if (res?.error) toast.error(res.error);
+      else router.refresh();
+    });
   }
 
   function clearSelections() {
@@ -1071,14 +1106,15 @@ export function ScoringConsole({
   }
 
   async function startMatch() {
-    // First start always begins at 0:00. Without this, clicking "Start match"
-    // on a match whose row still had a non-zero clock_seconds (e.g., previously
-    // played and reset to 'scheduled' by hand) would resume from that value.
+    // First start always begins at 0:00 and PAUSED. The global match clock
+    // doesn't tick until the first raider is picked (auto-started by the
+    // raiderId effect above), or the operator presses play manually. This
+    // prevents wasted seconds while the operator picks the opening raider.
     setClock(0);
     setRaidLeft(0);
     setRaidRunning(false);
     setStatus('live');
-    setRunning(true);
+    setRunning(false);
     const res = await setMatchStatusAction(tournamentId, matchId, 'live', {
       current_half: half,
       clock_seconds: 0,
@@ -1096,11 +1132,15 @@ export function ScoringConsole({
   }
 
   async function nextHalf() {
+    // Same pause-until-first-raider behavior as startMatch: the next half
+    // begins live but paused at 0:00. The clock starts ticking when the
+    // operator picks the opening raider of the half (auto-start effect)
+    // or hits play manually.
     const next = half + 1;
     setHalf(next);
     setClock(0);
     setStatus('live');
-    setRunning(true);
+    setRunning(false);
     await setMatchStatusAction(tournamentId, matchId, 'live', {
       current_half: next,
       clock_seconds: 0,
@@ -1283,12 +1323,16 @@ export function ScoringConsole({
                 active={attackingId === home.id}
                 slots={homeSlots}
                 onClick={() => setAttackingId(home.id)}
+                disabled={!!raiderId && attackingId !== home.id}
+                disabledReason="Complete the current raid before switching teams"
               />
               <RaidingTeamButton
                 team={away}
                 active={attackingId === away.id}
                 slots={awaySlots}
                 onClick={() => setAttackingId(away.id)}
+                disabled={!!raiderId && attackingId !== away.id}
+                disabledReason="Complete the current raid before switching teams"
               />
             </div>
 
@@ -1361,16 +1405,20 @@ export function ScoringConsole({
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="mb-2 flex shrink-0 items-center justify-between">
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  {raiderId
-                    ? `Raid in progress · ${actionsThisRaid} action${actionsThisRaid === 1 ? '' : 's'} so far`
-                    : 'Pick players for this raid'}
+                  {swapMode
+                    ? swapFirstId
+                      ? 'Swap mode · pick the second OUT defender to swap with'
+                      : 'Swap mode · pick the first OUT defender'
+                    : raiderId
+                      ? `Raid in progress · ${actionsThisRaid} action${actionsThisRaid === 1 ? '' : 's'} so far`
+                      : 'Pick players for this raid'}
                 </div>
                 <div className="flex items-center gap-2">
                   {/* Always-available Complete Raid — ends the current raid
                       cleanly. If no actions were committed, fires
                       empty_raid; otherwise just clears the picker + raid
                       timer so the next raid can start. */}
-                  {raiderId && pendingActions.length === 0 && (
+                  {raiderId && pendingActions.length === 0 && !swapMode && (
                     <Button
                       size="sm"
                       variant="flame"
@@ -1385,7 +1433,28 @@ export function ScoringConsole({
                       Complete Raid
                     </Button>
                   )}
-                  {(raiderId || touchedCount > 0) && (
+                  {/* Swap-order toggle: surfaces only when the defending team
+                      has 2+ OUT players (anything fewer can't be swapped).
+                      Disabled while a raid action queue is pending so the
+                      operator finishes the in-flight raid first. */}
+                  {defendingSlots.filter((s) => s.state === 'out').length >= 2 &&
+                    pendingActions.length === 0 && (
+                      <button
+                        type="button"
+                        onClick={() => (swapMode ? exitSwapMode() : setSwapMode(true))}
+                        disabled={pending}
+                        className={cn(
+                          'rounded-md border px-2 py-1 text-[10px] font-bold uppercase tracking-wider transition-colors',
+                          swapMode
+                            ? 'border-amber-500 bg-amber-500/15 text-amber-600'
+                            : 'border-border text-muted-foreground hover:border-amber-500 hover:text-amber-600',
+                        )}
+                        title="Swap two OUT defenders' positions in the revival queue"
+                      >
+                        {swapMode ? 'Cancel swap' : 'Swap order'}
+                      </button>
+                    )}
+                  {(raiderId || touchedCount > 0) && !swapMode && (
                     <button
                       type="button"
                       onClick={clearSelections}
@@ -1429,21 +1498,57 @@ export function ScoringConsole({
                   label="Defenders"
                   teamName={defending.name}
                   tone="defend"
-                  helperText={touchedCount > 0 ? `${touchedCount} selected` : 'Tap any'}
+                  helperText={
+                    swapMode
+                      ? swapFirstId
+                        ? 'Pick second'
+                        : 'Pick first'
+                      : touchedCount > 0
+                        ? `${touchedCount} selected`
+                        : 'Tap any'
+                  }
                 >
                   {defendingSlots.length === 0 ? (
                     <PickerEmpty />
                   ) : (
-                    defendingSlots.map((s) => (
-                      <PlayerChip
-                        key={s.playerId}
-                        slot={s}
-                        selected={touchedDefenderIds.includes(s.playerId)}
-                        tone="defend"
-                        disabled={s.state !== 'on_mat'}
-                        onClick={() => toggleDefender(s.playerId)}
-                      />
-                    ))
+                    (() => {
+                      // Queue badges (1, 2, 3, ...) on OUT defenders — only
+                      // shown in swap mode so normal-mode picker stays clean.
+                      // Sorted by out_seq ascending; nulls treated as Infinity
+                      // so they end up last (shouldn't happen for OUT rows
+                      // but be defensive).
+                      const queueOrder = swapMode
+                        ? defendingSlots
+                            .filter((s) => s.state === 'out')
+                            .slice()
+                            .sort(
+                              (a, b) =>
+                                (a.outSeq ?? Number.POSITIVE_INFINITY) -
+                                (b.outSeq ?? Number.POSITIVE_INFINITY),
+                            )
+                            .map((s, i) => [s.playerId, i + 1] as const)
+                        : [];
+                      const queueByPlayer = new Map<string, number>(queueOrder);
+                      return defendingSlots.map((s) => (
+                        <PlayerChip
+                          key={s.playerId}
+                          slot={s}
+                          selected={
+                            swapMode
+                              ? swapFirstId === s.playerId
+                              : touchedDefenderIds.includes(s.playerId)
+                          }
+                          tone="defend"
+                          disabled={
+                            swapMode ? s.state !== 'out' : s.state !== 'on_mat'
+                          }
+                          queueBadge={swapMode ? queueByPlayer.get(s.playerId) : undefined}
+                          onClick={() =>
+                            swapMode ? handleSwapTap(s.playerId) : toggleDefender(s.playerId)
+                          }
+                        />
+                      ));
+                    })()
                   )}
                 </PickerColumn>
               </div>
@@ -2652,7 +2757,7 @@ function CompactTeamScore({
         style={{
           background: team.primary_color
             ? `linear-gradient(135deg, ${team.primary_color}, ${team.primary_color}cc)`
-            : 'linear-gradient(135deg, hsl(var(--primary)), #ea580c)',
+            : 'linear-gradient(135deg, hsl(var(--primary)), #0052a3)',
         }}
       >
         {team.short_name || initials(team.name)}
@@ -2679,6 +2784,7 @@ function PlayerChip({
   tone,
   disabled,
   onClick,
+  queueBadge,
 }: {
   slot: PlayerSlot;
   selected: boolean;
@@ -2686,6 +2792,8 @@ function PlayerChip({
   tone: 'attack' | 'defend';
   disabled?: boolean;
   onClick: () => void;
+  /** Revival queue position (1, 2, 3, …) shown only in swap mode. */
+  queueBadge?: number;
 }) {
   const baseClass = 'flex items-center gap-2 rounded-md border-2 px-2 py-1.5 text-left text-xs transition-all';
   const stateClass = disabled
@@ -2754,6 +2862,14 @@ function PlayerChip({
       >
         {slot.fullName}
       </span>
+      {queueBadge != null && (
+        <span
+          className="rounded bg-amber-500/20 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700"
+          title={`Revival queue position #${queueBadge}`}
+        >
+          #{queueBadge}
+        </span>
+      )}
       {slot.state === 'out' && (
         <span className="rounded bg-red-500/15 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-500">
           OUT
@@ -2778,11 +2894,15 @@ function RaidingTeamButton({
   active,
   slots,
   onClick,
+  disabled = false,
+  disabledReason,
 }: {
   team: TeamLite;
   active: boolean;
   slots: PlayerSlot[];
   onClick: () => void;
+  disabled?: boolean;
+  disabledReason?: string;
 }) {
   // Active roster on the field = on_mat + out + suspended (red-carded
   // players are removed from the field; bench is the substitute pool).
@@ -2796,11 +2916,15 @@ function RaidingTeamButton({
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
+      title={disabled ? disabledReason : undefined}
+      aria-disabled={disabled}
       className={cn(
         'flex min-w-0 flex-col items-center gap-2 overflow-hidden rounded-md border-2 px-3 py-3 text-sm font-semibold transition-all sm:px-4',
         active
           ? 'border-primary bg-primary/10 text-primary'
           : 'border-border text-muted-foreground hover:border-border/80',
+        disabled && 'cursor-not-allowed opacity-50 hover:border-border',
       )}
     >
       <div className="flex min-w-0 items-center gap-2">

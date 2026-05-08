@@ -21,12 +21,12 @@ export default function LoginScreen() {
   const router = useRouter();
 
   // After auth.signInWithPassword resolves, look up the profile to decide
-  // where to land:
-  //   - no profile yet (race with handle_new_user trigger)  → setup
-  //   - profile.tenant_id == null                            → setup
-  //   - tenant_id set                                        → /organiser
-  //
-  // Mirrors apps/web/src/lib/auth.ts dashboardPathForRole logic.
+  // where to land. Routing mirrors index.tsx so refreshing the home tab
+  // and signing in produce the same destination:
+  //   role 'user'                       → /(fan)/feed
+  //   role 'organiser' with tenant      → /organiser
+  //   role 'organiser' without tenant   → /setup
+  //   role 'superadmin'                 → /organiser (admin console TBD)
   async function onSignIn() {
     if (!email.trim() || !password) {
       Alert.alert('Missing details', 'Enter your email and password.');
@@ -57,10 +57,14 @@ export default function LoginScreen() {
       .maybeSingle();
 
     setBusy(false);
-    if (!profile?.tenant_id) {
-      router.replace('/setup');
-    } else {
+    if (profile?.role === 'user') {
+      router.replace('/(fan)/feed');
+    } else if (profile?.role === 'superadmin') {
       router.replace('/organiser');
+    } else if (profile?.tenant_id) {
+      router.replace('/organiser');
+    } else {
+      router.replace('/setup');
     }
   }
 

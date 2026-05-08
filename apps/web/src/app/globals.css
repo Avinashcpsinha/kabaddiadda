@@ -58,95 +58,115 @@
 }
 
 :root {
-  /* Light theme — clean & energetic */
+  /* Light theme — kbdstars-style: white page, white cards, blue accents.
+     The brand colour appears in primary CTAs, links, and ring focus states;
+     surfaces themselves stay neutral so long-form content reads cleanly. */
   --background: 0 0% 100%;
-  --foreground: 24 10% 10%;
-  --card: 0 0% 100%;
-  --card-foreground: 24 10% 10%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 24 10% 10%;
+  --foreground: 0 0% 10%;
 
-  /* Kabaddi Flame: warm orange-red, the signature accent */
-  --primary: 16 95% 54%;
+  /* Cards = white with near-black text. */
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 10%;
+
+  /* Popovers + dropdowns stay white so menus / autocompletes read cleanly. */
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 10%;
+
+  /* Primary CTA blue. */
+  --primary: 210 100% 42%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 24 10% 96%;
-  --secondary-foreground: 24 10% 10%;
-  --muted: 24 10% 96%;
-  --muted-foreground: 24 6% 45%;
-  --accent: 16 95% 96%;
-  --accent-foreground: 16 95% 35%;
+  /* Section bands = light neutral grey. */
+  --secondary: 0 0% 96%;
+  --secondary-foreground: 0 0% 10%;
+
+  /* Muted = neutral grey, used by small/secondary text. */
+  --muted: 0 0% 96%;
+  --muted-foreground: 0 0% 42%;
+
+  /* Accent = pale blue tint for hover bgs + info pills on white surfaces. */
+  --accent: 210 100% 95%;
+  --accent-foreground: 220 75% 30%;
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
-  --border: 24 10% 91%;
-  --input: 24 10% 91%;
-  --ring: 16 95% 54%;
+  --border: 0 0% 91%;
+  --input: 0 0% 91%;
+  --ring: 210 100% 42%;
 
-  /* Kabaddi mat colors for visualizations */
-  --mat: 30 50% 45%;
+  /* Kabaddi mat — neutralised to a blue-grey so the only colours on the
+     site are blue + white + the necessary semantic red. */
+  --mat: 220 15% 50%;
   --mat-line: 0 0% 100%;
 
-  /* Sports/telemetry accents — light theme */
-  --electric: 190 95% 42%;
+  /* Semantic accents — re-tuned to the blue/white palette. Cyan electric
+     is now a lighter blue, gold is a deeper royal blue, victory shifts from
+     green to the brand blue, and only LIVE / DEFEAT keep red because red is
+     the universal danger / urgent signal and removing it harms accessibility. */
+  --electric: 200 100% 50%;
   --electric-foreground: 0 0% 100%;
-  --victory: 142 70% 38%;
+  --victory: 210 100% 42%;
   --victory-foreground: 0 0% 100%;
   --defeat: 0 72% 50%;
   --defeat-foreground: 0 0% 100%;
-  --gold: 42 95% 50%;
-  --gold-foreground: 24 30% 12%;
+  --gold: 220 80% 35%;
+  --gold-foreground: 0 0% 100%;
   --live: 0 90% 50%;
   --live-foreground: 0 0% 100%;
 
-  /* Default team-color slot (overridable inline) */
-  --team-primary: 16 95% 54%;
-  --team-secondary: 24 10% 96%;
+  /* Default team-color slot (overridable inline) — tracks primary blue. */
+  --team-primary: 210 100% 42%;
+  --team-secondary: 220 15% 96%;
   --team-foreground: 0 0% 100%;
 
   --radius: 0.75rem;
 }
 
 .dark {
-  /* Dark theme — premium sports app feel */
-  --background: 240 10% 4%;
+  /* Dark theme — visibly BLUE navy background (not near-black). The bg has
+     enough saturation and lightness that it reads as deep blue at a glance,
+     not just a darker shade of black. Cards step up slightly so panels are
+     distinguishable from the page surface. */
+  --background: 215 70% 12%;
   --foreground: 0 0% 98%;
-  --card: 240 10% 6%;
+  --card: 215 60% 17%;
   --card-foreground: 0 0% 98%;
-  --popover: 240 10% 6%;
+  --popover: 215 60% 17%;
   --popover-foreground: 0 0% 98%;
 
-  --primary: 16 100% 60%;
-  --primary-foreground: 0 0% 100%;
+  /* Brighter blue for dark-mode primary contrast against the navy bg. */
+  --primary: 210 100% 65%;
+  --primary-foreground: 215 70% 12%;
 
-  --secondary: 240 5% 12%;
+  --secondary: 215 55% 22%;
   --secondary-foreground: 0 0% 98%;
-  --muted: 240 5% 12%;
-  --muted-foreground: 240 5% 65%;
-  --accent: 16 95% 15%;
-  --accent-foreground: 16 100% 75%;
+  --muted: 215 55% 22%;
+  --muted-foreground: 215 25% 75%;
+  /* Dark-theme accent: lifted blue panel + bright blue text. */
+  --accent: 210 70% 26%;
+  --accent-foreground: 210 100% 85%;
   --destructive: 0 72% 55%;
   --destructive-foreground: 0 0% 98%;
-  --border: 240 5% 15%;
-  --input: 240 5% 15%;
-  --ring: 16 100% 60%;
+  --border: 215 50% 28%;
+  --input: 215 50% 28%;
+  --ring: 210 100% 65%;
 
-  --mat: 30 60% 35%;
+  --mat: 215 30% 30%;
   --mat-line: 0 0% 95%;
 
-  /* Sports/telemetry accents — dark theme (brighter for contrast) */
-  --electric: 190 100% 55%;
-  --electric-foreground: 240 10% 4%;
-  --victory: 142 75% 50%;
-  --victory-foreground: 240 10% 4%;
+  /* Dark-theme semantic accents — blue-only, brighter for navy bg contrast. */
+  --electric: 200 100% 70%;
+  --electric-foreground: 215 70% 12%;
+  --victory: 210 100% 65%;
+  --victory-foreground: 215 70% 12%;
   --defeat: 0 85% 60%;
   --defeat-foreground: 0 0% 100%;
-  --gold: 42 100% 60%;
-  --gold-foreground: 240 10% 4%;
+  --gold: 220 100% 70%;
+  --gold-foreground: 215 70% 12%;
   --live: 0 95% 60%;
   --live-foreground: 0 0% 100%;
 
-  --team-primary: 16 100% 60%;
-  --team-secondary: 240 5% 12%;
+  --team-primary: 210 100% 65%;
+  --team-secondary: 215 55% 22%;
   --team-foreground: 0 0% 100%;
 }
 

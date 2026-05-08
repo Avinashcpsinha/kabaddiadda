@@ -120,7 +120,7 @@ export default async function PublicTenantPage({
                 style={{
                   background: brandColor
                     ? `linear-gradient(135deg, ${brandColor}, ${brandColor}cc)`
-                    : 'linear-gradient(135deg, #f59e0b, #d97706)',
+                    : 'linear-gradient(135deg, #0052a3, #003d7a)',
                 }}
               >
                 <Crown className="h-7 w-7 text-white" />

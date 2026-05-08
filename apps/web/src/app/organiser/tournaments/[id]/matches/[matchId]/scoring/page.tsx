@@ -43,7 +43,7 @@ export default async function ScoringPage({
       .eq('match_id', matchId),
     supabase
       .from('match_player_state')
-      .select('player_id, team_id, state, suspended_until_seconds, suspended_until_half')
+      .select('player_id, team_id, state, out_seq, suspended_until_seconds, suspended_until_half')
       .eq('match_id', matchId),
   ]);
 
@@ -137,6 +137,7 @@ export default async function ScoringPage({
         return {
           playerId: s.player_id,
           state: s.state,
+          outSeq: s.out_seq,
           suspendedUntilSeconds: s.suspended_until_seconds,
           suspendedUntilHalf: s.suspended_until_half,
           fullName: p?.full_name ?? 'Unknown',

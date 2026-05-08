@@ -39,7 +39,13 @@ export default function HomeScreen() {
   useEffect(() => {
     if (loading) return;
     if (!user) return;
-    if (user.tenantId) router.replace('/organiser');
+    // Role-aware redirect:
+    //   user        → fan tab navigator (/feed)
+    //   organiser   → /organiser if their tenant is set up, /setup otherwise
+    //   superadmin  → /organiser (platform admin console isn't built yet)
+    if (user.role === 'user') router.replace('/(fan)/feed');
+    else if (user.role === 'superadmin') router.replace('/organiser');
+    else if (user.tenantId) router.replace('/organiser');
     else router.replace('/setup');
   }, [loading, user, router]);
 
@@ -112,6 +118,11 @@ export default function HomeScreen() {
         <Link href="/(auth)/login" asChild>
           <Pressable style={styles.ctaGhost}>
             <Text style={styles.ctaGhostText}>I already have an account</Text>
+          </Pressable>
+        </Link>
+        <Link href="/(fan)/live" asChild>
+          <Pressable hitSlop={8} style={styles.ctaTertiary}>
+            <Text style={styles.ctaTertiaryText}>Browse live matches without an account →</Text>
           </Pressable>
         </Link>
       </View>
@@ -306,6 +317,8 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
   },
   ctaGhostText: { color: theme.colors.text, fontWeight: '700', fontSize: theme.font.body },
+  ctaTertiary: { alignItems: 'center', paddingVertical: theme.spacing.sm },
+  ctaTertiaryText: { color: theme.colors.primary, fontSize: theme.font.small, fontWeight: '700' },
 
   // Section header
   sectionKicker: {

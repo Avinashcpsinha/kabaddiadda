@@ -80,7 +80,7 @@ export function ScoreProgressionChart({
           type="monotone"
           dataKey="away"
           name={awayName}
-          stroke={awayColor ?? '#0ea5e9'}
+          stroke={awayColor ?? '#475569'}
           strokeWidth={2.5}
           dot={false}
           activeDot={{ r: 4 }}

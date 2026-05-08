@@ -503,11 +503,11 @@ export function OverlayStrip({
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-[3px]">
           <div
             className="flex-1"
-            style={{ background: home.primary_color ?? '#f97316' }}
+            style={{ background: home.primary_color ?? '#0052a3' }}
           />
           <div
             className="flex-1"
-            style={{ background: away.primary_color ?? '#0ea5e9' }}
+            style={{ background: away.primary_color ?? '#475569' }}
           />
         </div>
       </div>
@@ -542,7 +542,7 @@ function TeamSide({
       style={{
         background: team.primary_color
           ? `linear-gradient(135deg, ${team.primary_color}, ${team.primary_color}cc)`
-          : 'linear-gradient(135deg, #f97316, #ea580c)',
+          : 'linear-gradient(135deg, #0052a3, #0052a3)',
       }}
     >
       {team.short_name || initials(team.name)}

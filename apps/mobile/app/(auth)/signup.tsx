@@ -1,4 +1,4 @@
-import { Link, useRouter } from 'expo-router';
+import { Link, useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   Alert,
@@ -15,17 +15,22 @@ import { signupSchema } from '@kabaddiadda/shared';
 import { supabase } from '../../src/lib/supabase';
 import { theme } from '../../src/theme';
 
-// Organiser sign-up. Mirrors the web flow:
-//   1. supabase.auth.signUp with role=organiser in user metadata
-//   2. handle_new_user trigger creates the profile row server-side
-//   3. Supabase emails the user a confirmation link
-//   4. After they click the link they can sign in → land on /setup → tenant
+type Role = 'user' | 'organiser';
+
+// Sign-up. Two flavours selectable via the role toggle:
+//   user      — fans / general users; no league setup needed
+//   organiser — league owners; routed through /setup after first sign-in
 //
-// We hardcode role to 'organiser' here because mobile is organiser-first.
-// A separate fan sign-up flow can use the same supabase call with
-// role: 'user' when we add the consumer side of the app.
+// Flow stays the same on the Supabase side — we send role in user metadata,
+// the handle_new_user trigger creates the matching profile row, then a
+// confirmation email goes out.
+//
+// Optional ?role= query (from deep link or marketing CTA) preselects the toggle.
 export default function SignupScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ role?: string }>();
+  const initialRole: Role = params.role === 'user' ? 'user' : 'organiser';
+  const [role, setRole] = useState<Role>(initialRole);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -37,7 +42,7 @@ export default function SignupScreen() {
       email: email.trim(),
       password,
       fullName: fullName.trim(),
-      role: 'organiser',
+      role,
     });
     if (!parsed.success) {
       Alert.alert('Check your details', parsed.error.issues[0]?.message ?? 'Invalid input');
@@ -80,17 +85,39 @@ export default function SignupScreen() {
     );
   }
 
+  const headline =
+    role === 'organiser' ? 'Create your league account' : 'Join Kabaddiadda as a fan';
+  const subtitle =
+    role === 'organiser'
+      ? "You'll set up your league name and public URL on the next step."
+      : 'Follow teams, save tournaments, and get push notifications when your team plays.';
+  const kicker = role === 'organiser' ? 'ORGANISER · KABADDIADDA' : 'FAN ZONE · KABADDIADDA';
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: theme.colors.bg }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={styles.wrap} keyboardShouldPersistTaps="handled">
-        <Text style={styles.kicker}>ORGANISER · KABADDIADDA</Text>
-        <Text style={styles.title}>Create your league account</Text>
-        <Text style={styles.subtitle}>
-          You'll set up your league name and public URL on the next step.
-        </Text>
+        <Text style={styles.kicker}>{kicker}</Text>
+        <Text style={styles.title}>{headline}</Text>
+        <Text style={styles.subtitle}>{subtitle}</Text>
+
+        {/* Role toggle — pill switcher between fan + organiser */}
+        <View style={styles.roleToggle}>
+          <RolePill
+            label="I'm a fan"
+            sub="Watch & follow"
+            active={role === 'user'}
+            onPress={() => setRole('user')}
+          />
+          <RolePill
+            label="I'm an organiser"
+            sub="Run tournaments"
+            active={role === 'organiser'}
+            onPress={() => setRole('organiser')}
+          />
+        </View>
 
         <View style={styles.field}>
           <Text style={styles.label}>Full name</Text>
@@ -148,6 +175,28 @@ export default function SignupScreen() {
   );
 }
 
+function RolePill({
+  label,
+  sub,
+  active,
+  onPress,
+}: {
+  label: string;
+  sub: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.rolePill, active && styles.rolePillActive]}
+    >
+      <Text style={[styles.rolePillLabel, active && styles.rolePillLabelActive]}>{label}</Text>
+      <Text style={[styles.rolePillSub, active && styles.rolePillSubActive]}>{sub}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   wrap: {
     padding: theme.spacing.lg,
@@ -169,7 +218,7 @@ const styles = StyleSheet.create({
   subtitle: {
     color: theme.colors.textMuted,
     fontSize: theme.font.body,
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
     lineHeight: 22,
   },
   body: {
@@ -207,4 +256,25 @@ const styles = StyleSheet.create({
   },
   linkPrefix: { color: theme.colors.textMuted, fontSize: theme.font.small },
   linkText: { color: theme.colors.primary, fontSize: theme.font.small, fontWeight: '700' },
+
+  roleToggle: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+  },
+  rolePill: {
+    flex: 1,
+    backgroundColor: theme.colors.bgElevated,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.md,
+    gap: 2,
+    alignItems: 'flex-start',
+  },
+  rolePillActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.primary + '11' },
+  rolePillLabel: { color: theme.colors.text, fontSize: theme.font.small, fontWeight: '800' },
+  rolePillLabelActive: { color: theme.colors.primary },
+  rolePillSub: { color: theme.colors.textMuted, fontSize: 10, fontWeight: '600' },
+  rolePillSubActive: { color: theme.colors.primary + 'cc' },
 });

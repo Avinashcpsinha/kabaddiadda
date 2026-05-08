@@ -374,7 +374,7 @@ function TeamPanel({
               style={{
                 background: team.primary_color
                   ? `linear-gradient(135deg, ${team.primary_color}, ${team.primary_color}cc)`
-                  : 'linear-gradient(135deg, hsl(var(--primary)), #ea580c)',
+                  : 'linear-gradient(135deg, hsl(var(--primary)), #0052a3)',
               }}
             >
               {team.short_name || initials(team.name)}

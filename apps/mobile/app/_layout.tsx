@@ -13,7 +13,11 @@ export default function RootLayout() {
           headerTintColor: theme.colors.text,
           contentStyle: { backgroundColor: theme.colors.bg },
         }}
-      />
+      >
+        {/* The fan tab navigator owns its own header; suppress the parent
+            Stack's header so we don't render two stacked title bars. */}
+        <Stack.Screen name="(fan)" options={{ headerShown: false }} />
+      </Stack>
     </SafeAreaProvider>
   );
 }

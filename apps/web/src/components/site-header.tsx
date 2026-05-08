@@ -24,7 +24,7 @@ export async function SiteHeader() {
       <div className="container mx-auto flex h-16 items-center justify-between gap-4 px-4">
         <div className="flex items-center gap-8">
           <Link href="/">
-            <Logo />
+            <Logo priority />
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-muted-foreground">
             <Link href="/tournaments" className="hover:text-foreground transition-colors">

@@ -44,7 +44,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${fontSans.variable} ${fontMono.variable} ${fontDisplay.variable} ${fontEditorial.variable}`}
     >
       <body className="min-h-screen bg-background font-sans antialiased">
-        <ThemeProvider attribute="class" defaultTheme="dark" disableTransitionOnChange>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          storageKey="kbd-theme-v2"
+          disableTransitionOnChange
+        >
           {children}
           <Toaster richColors closeButton position="top-right" />
         </ThemeProvider>

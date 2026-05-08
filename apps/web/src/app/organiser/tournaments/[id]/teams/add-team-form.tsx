@@ -46,7 +46,7 @@ export function AddTeamForm({ tournamentId }: { tournamentId: string }) {
         <Label htmlFor="primaryColor" className="text-xs">
           Color (hex)
         </Label>
-        <Input id="primaryColor" name="primaryColor" placeholder="#f97316" pattern="#[0-9A-Fa-f]{6}" />
+        <Input id="primaryColor" name="primaryColor" placeholder="#0052a3" pattern="#[0-9A-Fa-f]{6}" />
       </div>
       <FormSubmit className="w-full" variant="default">
         <Plus className="h-4 w-4" />

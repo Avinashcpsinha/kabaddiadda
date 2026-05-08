@@ -7,7 +7,7 @@ export function SiteFooter() {
       <div className="container mx-auto px-4 py-12">
         <div className="grid gap-8 md:grid-cols-4">
           <div className="space-y-3">
-            <Logo />
+            <Logo variant="footer" />
             <p className="text-sm text-muted-foreground">
               The platform for everything Kabaddi — tournaments, teams, fans.
             </p>

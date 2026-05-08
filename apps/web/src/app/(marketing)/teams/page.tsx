@@ -150,7 +150,7 @@ export default async function TeamsPage({
                   style={{
                     background: t.primary_color
                       ? `linear-gradient(135deg, ${t.primary_color}, ${t.primary_color}cc)`
-                      : 'linear-gradient(135deg, hsl(var(--primary)), #ea580c)',
+                      : 'linear-gradient(135deg, hsl(var(--primary)), #0052a3)',
                   }}
                 >
                   {t.short_name ?? initials(t.name)}

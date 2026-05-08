@@ -136,7 +136,7 @@ export default async function PlayerProfilePage({
           style={{
             background: team?.primary_color
               ? `linear-gradient(135deg, ${team.primary_color}, ${team.primary_color}cc)`
-              : 'linear-gradient(135deg, hsl(var(--primary)), #ea580c)',
+              : 'linear-gradient(135deg, hsl(var(--primary)), #0052a3)',
           }}
         />
         <CardContent className="grid gap-6 p-6 sm:grid-cols-[auto_1fr_auto] sm:items-end">

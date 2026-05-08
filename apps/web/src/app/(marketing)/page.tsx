@@ -286,8 +286,8 @@ function LiveMatchesSection({ matches }: { matches: LiveMatchCard[] }) {
 }
 
 function FeaturedMatchCard({ match }: { match: LiveMatchCard }) {
-  const homeColor = match.home_team?.primary_color ?? '#ea580c';
-  const awayColor = match.away_team?.primary_color ?? '#0ea5e9';
+  const homeColor = match.home_team?.primary_color ?? '#0052a3';
+  const awayColor = match.away_team?.primary_color ?? '#475569';
   return (
     <Link
       href={`/live/${match.id}`}
@@ -352,7 +352,7 @@ function FeaturedTeam({ team, score }: { team: LiveMatchCard['home_team']; score
         style={{
           background: team?.primary_color
             ? `linear-gradient(135deg, ${team.primary_color}, ${team.primary_color}cc)`
-            : 'linear-gradient(135deg, hsl(var(--primary)), #ea580c)',
+            : 'linear-gradient(135deg, hsl(var(--primary)), #0052a3)',
         }}
       >
         {team?.short_name ?? '??'}
@@ -422,7 +422,7 @@ function CompactTeamRow({ team, score }: { team: LiveMatchCard['home_team']; sco
         style={{
           background: team?.primary_color
             ? `linear-gradient(135deg, ${team.primary_color}, ${team.primary_color}cc)`
-            : 'linear-gradient(135deg, hsl(var(--primary)), #ea580c)',
+            : 'linear-gradient(135deg, hsl(var(--primary)), #0052a3)',
         }}
       >
         {team?.short_name ?? '??'}
@@ -552,7 +552,7 @@ function TeamSide({
         style={{
           background: team?.primary_color
             ? `linear-gradient(135deg, ${team.primary_color}, ${team.primary_color}cc)`
-            : 'linear-gradient(135deg, hsl(var(--primary)), #ea580c)',
+            : 'linear-gradient(135deg, hsl(var(--primary)), #0052a3)',
         }}
       >
         {team?.short_name ?? '??'}

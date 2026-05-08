@@ -116,7 +116,7 @@ export default async function TournamentReportPage({
     .map((p) => ({
       label: `${p.full_name}${p.jersey_number != null ? ` #${p.jersey_number}` : ''}`,
       value: p.tackle_points,
-      color: '#0ea5e9',
+      color: '#475569',
     }));
 
   return (
@@ -273,7 +273,7 @@ export default async function TournamentReportPage({
             <HorizontalBarChart
               data={defenderRows}
               valueFormatter={(n) => `${n} pts`}
-              accentColor="#0ea5e9"
+              accentColor="#475569"
             />
           </CardContent>
         </Card>
