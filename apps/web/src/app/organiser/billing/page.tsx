@@ -26,7 +26,7 @@ function formatINR(minor: number): string {
 export default async function BillingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ subscribed?: string; cancelled?: string }>;
+  searchParams: Promise<{ subscribed?: string; cancelled?: string; intent?: string }>;
 }) {
   const params = await searchParams;
   const user = await getSessionUser();
@@ -88,6 +88,46 @@ export default async function BillingPage({
         <div className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-600">
           <AlertCircle className="h-4 w-4" />
           Checkout cancelled — no charges made.
+        </div>
+      )}
+
+      {/* Intent banners — set by /setup when the organiser picks a paid
+          plan during league creation. We don't auto-charge; we just steer
+          them to the right next action. */}
+      {params.intent === 'pro' && currentPlan === 'free' && (
+        <div className="flex items-start gap-3 rounded-md border border-primary/40 bg-primary/5 p-4 text-sm">
+          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <div className="flex-1">
+            <p className="font-semibold text-foreground">
+              Almost there — confirm your Pro subscription.
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              Click <span className="font-medium text-foreground">Upgrade to Pro</span> below
+              to open the secure Razorpay checkout. You will be charged ₹4,999 / month plus
+              GST; Pro features activate the moment payment confirms.
+            </p>
+          </div>
+        </div>
+      )}
+      {params.intent === 'enterprise' && (
+        <div className="flex items-start gap-3 rounded-md border border-primary/40 bg-primary/5 p-4 text-sm">
+          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <div className="flex-1">
+            <p className="font-semibold text-foreground">
+              Thanks for choosing Enterprise.
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              Your league is live on the Free plan so you can start setting things up. Email{' '}
+              <a
+                href="mailto:hello@kabaddiadda.com?subject=Enterprise%20pricing"
+                className="text-primary hover:underline"
+              >
+                hello@kabaddiadda.com
+              </a>{' '}
+              and we will scope the Enterprise plan with you (custom domain, white-label,
+              SLA support, sponsor slots).
+            </p>
+          </div>
         </div>
       )}
 

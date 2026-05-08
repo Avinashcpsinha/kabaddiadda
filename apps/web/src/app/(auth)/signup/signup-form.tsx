@@ -49,6 +49,13 @@ export function SignupForm() {
         />
       </div>
 
+      {role === 'organiser' && (
+        <div className="mb-4 rounded-md border border-primary/30 bg-primary/5 p-3 text-xs text-muted-foreground">
+          You will pick a plan (Free / Pro / Enterprise) in the next step after we
+          create your league. Free starts immediately — no card needed.
+        </div>
+      )}
+
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="fullName">Full name</Label>
