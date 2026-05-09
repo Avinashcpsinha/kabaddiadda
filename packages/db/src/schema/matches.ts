@@ -27,6 +27,8 @@ export const matches = pgTable('matches', {
   currentHalf: integer('current_half').default(1).notNull(),
   /** Seconds elapsed in the current half (resets each half). */
   clockSeconds: integer('clock_seconds').default(0).notNull(),
+  /** Length of one half in seconds. Set when locking the lineup. */
+  halfSeconds: integer('half_seconds').default(1800).notNull(),
   /** Free-text label e.g. "Quarter Final 1" or "Group A · Match 3". */
   round: text('round'),
   /** 1 = legacy "tap a button" console; 2 = new lineup-aware console. */

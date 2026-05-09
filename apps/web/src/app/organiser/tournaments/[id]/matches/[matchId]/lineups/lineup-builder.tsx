@@ -68,6 +68,8 @@ function counts(sel: TeamSelection) {
   return { onMat, bench };
 }
 
+const HALF_PRESETS = [15, 20, 25, 30, 40, 45] as const;
+
 export function LineupBuilder({
   matchId,
   tournamentId,
@@ -77,6 +79,7 @@ export function LineupBuilder({
   awayRoster,
   initialHome,
   initialAway,
+  initialHalfMinutes,
   locked,
 }: {
   matchId: string;
@@ -87,6 +90,8 @@ export function LineupBuilder({
   awayRoster: RosterPlayer[];
   initialHome: InitialLineup;
   initialAway: InitialLineup;
+  /** Persisted half length in MINUTES. Defaults handled at page level. */
+  initialHalfMinutes: number;
   /** True when the match is already live — show lineup read-only. */
   locked: boolean;
 }) {
@@ -96,6 +101,7 @@ export function LineupBuilder({
   const [awaySel, setAwaySel] = React.useState<TeamSelection>(() =>
     buildInitialSelection(awayRoster, initialAway),
   );
+  const [halfMinutes, setHalfMinutes] = React.useState<number>(initialHalfMinutes);
   const [pending, startTransition] = React.useTransition();
   // Per-browser preference: when enabled, scoring actions stage and need an
   // explicit Confirm click before recording. Default true; persisted in
@@ -226,13 +232,21 @@ export function LineupBuilder({
 
   function handleSubmit(startMatch: boolean) {
     if (startMatch && !canStart) return;
+    if (
+      !Number.isFinite(halfMinutes) ||
+      halfMinutes < 5 ||
+      halfMinutes > 60
+    ) {
+      toast.error('Half length must be between 5 and 60 minutes');
+      return;
+    }
     startTransition(() => {
       void (async () => {
         const res = await setMatchLineupsAndStartAction(
           tournamentId,
           matchId,
           [selectionToInput(home, homeSel), selectionToInput(away, awaySel)],
-          { startMatch },
+          { startMatch, halfSeconds: halfMinutes * 60 },
         );
         if (res?.error) toast.error(res.error);
         else if (!startMatch) toast.success('Lineups saved');
@@ -281,7 +295,53 @@ export function LineupBuilder({
 
       {!locked && (
         <Card>
-          <CardContent className="flex flex-col gap-3 p-4">
+          <CardContent className="flex flex-col gap-4 p-4">
+            {/* Half length picker — applies to both halves of THIS match.
+                Quick presets cover 15 / 20 / 25 / 30 / 40 / 45 min;
+                custom input handles anything in 5-60. Locked once the
+                match goes live. */}
+            <div className="flex flex-col gap-2 border-b border-border/50 pb-4">
+              <div className="text-sm font-medium">Match length (per half)</div>
+              <div className="flex flex-wrap items-center gap-2">
+                {HALF_PRESETS.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setHalfMinutes(m)}
+                    className={cn(
+                      'rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors',
+                      halfMinutes === m
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-muted-foreground hover:border-border/80 hover:text-foreground',
+                    )}
+                  >
+                    {m} min
+                  </button>
+                ))}
+                <div className="ml-auto flex items-center gap-1.5 text-xs">
+                  <span className="text-muted-foreground">Custom:</span>
+                  <input
+                    type="number"
+                    min={5}
+                    max={60}
+                    step={1}
+                    value={halfMinutes}
+                    onChange={(e) => {
+                      const n = parseInt(e.target.value, 10);
+                      if (Number.isFinite(n)) setHalfMinutes(n);
+                    }}
+                    className="h-8 w-16 rounded-md border border-input bg-background px-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-ring"
+                    aria-label="Custom half length in minutes"
+                  />
+                  <span className="text-muted-foreground">min</span>
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Two halves of this length, plus a half-time break. Standard PKL is 20 min;
+                tournaments often run 15 or 30. Total match: {halfMinutes * 2} minutes.
+              </p>
+            </div>
+
             <label className="flex cursor-pointer items-start gap-2 text-sm">
               <input
                 type="checkbox"

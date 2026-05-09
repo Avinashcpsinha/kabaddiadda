@@ -59,7 +59,8 @@ import {
   type EventType,
 } from '../actions';
 
-const HALF_SECONDS = KABADDI.MATCH_HALF_SECONDS;
+// Per-match half length is now read from `initial.halfSeconds`. The
+// constant in @kabaddiadda/shared remains as a default fallback only.
 const RAID_SECONDS = KABADDI.RAID_TIME_SECONDS;
 
 interface TeamLite {
@@ -101,6 +102,8 @@ interface InitialState {
   awayScore: number;
   currentHalf: number;
   clockSeconds: number;
+  /** Length of one half in seconds, configured at lineup time. */
+  halfSeconds: number;
   /** Persisted in-progress raid — restored on refresh. */
   currentRaiderId: string | null;
   currentAttackingTeamId: string | null;
@@ -328,10 +331,14 @@ export function ScoringConsole({
 }) {
   const router = useRouter();
   const [home, away] = [initial.home, initial.away];
+  // Half length is fixed for the duration of the match (set at lineup time);
+  // we just read it here. Default mirrors the Kabaddi domain constant in
+  // case a stale row is missing the column.
+  const halfSeconds = initial.halfSeconds || KABADDI.MATCH_halfSeconds;
   const [status, setStatus] = React.useState(initial.status);
   const [half, setHalf] = React.useState(initial.currentHalf);
   // Internally tracks ELAPSED seconds (matches DB schema + public live page).
-  // Display computes remaining = HALF_SECONDS - clock for the countdown.
+  // Display computes remaining = halfSeconds - clock for the countdown.
   // Guard: if status is 'scheduled', start at 0 even if DB has stale clock.
   const [clock, setClock] = React.useState(
     initial.status === 'scheduled' ? 0 : initial.clockSeconds,
@@ -538,7 +545,7 @@ export function ScoringConsole({
   }
 
   const isLive = status === 'live';
-  const remaining = Math.max(0, HALF_SECONDS - clock);
+  const remaining = Math.max(0, halfSeconds - clock);
 
   // Match clock — counts up internally while running.
   React.useEffect(() => {
@@ -547,9 +554,9 @@ export function ScoringConsole({
     return () => clearInterval(t);
   }, [running]);
 
-  // Auto-stop at end of half (clock reaches HALF_SECONDS).
+  // Auto-stop at end of half (clock reaches halfSeconds).
   React.useEffect(() => {
-    if (clock >= HALF_SECONDS && running) {
+    if (clock >= halfSeconds && running) {
       setRunning(false);
       setRaidRunning(false);
       beepTimeUp();
@@ -705,7 +712,7 @@ export function ScoringConsole({
 
   /**
    * Manually add minutes to the match clock. The clock counts UP to
-   * HALF_SECONDS, so "adding" minutes means rolling the elapsed value
+   * halfSeconds, so "adding" minutes means rolling the elapsed value
    * BACK by that many seconds (extending the time remaining).
    *
    * Locked to status='live' AND running=false — can only adjust while
@@ -723,7 +730,7 @@ export function ScoringConsole({
       return;
     }
     if (addSeconds <= 0) return;
-    const next = Math.max(0, Math.min(HALF_SECONDS, clock - addSeconds));
+    const next = Math.max(0, Math.min(halfSeconds, clock - addSeconds));
     setClock(next);
     void persistTimerStateAction({
       matchId,

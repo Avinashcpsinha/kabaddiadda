@@ -9,7 +9,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { cn, initials } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 
-const HALF_SECONDS = KABADDI.MATCH_HALF_SECONDS;
+// Half length is per-match now — read from initial.halfSeconds. The
+// shared constant is kept only as the fallback default.
 const RAID_SECONDS = KABADDI.RAID_TIME_SECONDS;
 
 interface TeamLite {
@@ -48,6 +49,8 @@ interface InitialState {
   awayScore: number;
   currentHalf: number;
   clockSeconds: number;
+  /** Length of one half in seconds — set per-match at lineup time. */
+  halfSeconds: number;
   scheduledAt: string;
   round: string | null;
   home: TeamLite;
@@ -178,6 +181,7 @@ export function LiveMatchDisplay({
 }) {
   const router = useRouter();
   const { home, away } = initial;
+  const halfSeconds = initial.halfSeconds || KABADDI.MATCH_halfSeconds;
 
   const [state, setState] = React.useState({
     status: initial.status,
@@ -354,7 +358,7 @@ export function LiveMatchDisplay({
   }, [matchId, router]);
 
   const isLive = state.status === 'live';
-  const remaining = Math.max(0, HALF_SECONDS - clockSeconds);
+  const remaining = Math.max(0, halfSeconds - clockSeconds);
 
   return (
     <div className="space-y-6">
@@ -398,7 +402,7 @@ export function LiveMatchDisplay({
             <div className="space-y-3 text-center">
               <StatusPill status={state.status} />
               <div className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                Q{state.currentHalf} · {Math.floor(HALF_SECONDS / 60)} min half
+                Q{state.currentHalf} · {Math.floor(halfSeconds / 60)} min half
               </div>
               <div
                 className={cn(

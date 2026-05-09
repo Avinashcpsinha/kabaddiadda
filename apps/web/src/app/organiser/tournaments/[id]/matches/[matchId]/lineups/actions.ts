@@ -17,10 +17,23 @@ export async function setMatchLineupsAndStartAction(
   tournamentId: string,
   matchId: string,
   lineups: LineupInput[],
-  options: { startMatch: boolean } = { startMatch: true },
+  options: { startMatch: boolean; halfSeconds?: number } = { startMatch: true },
 ) {
   const user = await getSessionUser();
   if (!user?.tenantId) return { error: 'Not authorised' };
+
+  // Half-length sanity bounds. 5 min minimum is short enough for a
+  // demo / friendly; 60 min is more than any kabaddi format ever runs.
+  // Anything outside is almost certainly a typo.
+  if (options.halfSeconds != null) {
+    if (
+      !Number.isFinite(options.halfSeconds) ||
+      options.halfSeconds < 5 * 60 ||
+      options.halfSeconds > 60 * 60
+    ) {
+      return { error: 'Half length must be between 5 and 60 minutes' };
+    }
+  }
 
   for (const l of lineups) {
     if (l.startingPlayerIds.length !== KABADDI.PLAYERS_PER_SIDE) {
@@ -55,6 +68,16 @@ export async function setMatchLineupsAndStartAction(
       { onConflict: 'match_id,team_id' },
     );
     if (error) return { error: error.message };
+  }
+
+  // Persist the half length whenever it's provided — both on Save draft
+  // (so reopening the lineup remembers the choice) and on Lock & start.
+  if (options.halfSeconds != null) {
+    const { error: hsErr } = await supabase
+      .from('matches')
+      .update({ half_seconds: options.halfSeconds })
+      .eq('id', matchId);
+    if (hsErr) return { error: hsErr.message };
   }
 
   if (options.startMatch) {

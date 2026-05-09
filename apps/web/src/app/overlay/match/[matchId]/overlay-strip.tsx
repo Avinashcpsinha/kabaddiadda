@@ -5,7 +5,8 @@ import { KABADDI } from '@kabaddiadda/shared';
 import { createClient } from '@/lib/supabase/client';
 import { cn, initials } from '@/lib/utils';
 
-const HALF_SECONDS = KABADDI.MATCH_HALF_SECONDS;
+// Half length is per-match — read from initial.halfSeconds. The shared
+// constant is kept only as the fallback default.
 
 interface TeamLite {
   id: string;
@@ -44,6 +45,8 @@ interface InitialState {
   awayScore: number;
   currentHalf: number;
   clockSeconds: number;
+  /** Length of one half in seconds — set per-match at lineup time. */
+  halfSeconds: number;
   currentAttackingTeamId: string | null;
   homeDodCounter: number;
   awayDodCounter: number;
@@ -203,6 +206,7 @@ export function OverlayStrip({
   const home = initial.home;
   const away = initial.away;
   const [playerMap] = React.useState(initial.playerMap);
+  const halfSeconds = initial.halfSeconds || KABADDI.MATCH_halfSeconds;
 
   const [status, setStatus] = React.useState(initial.status);
   const [homeScore, setHomeScore] = React.useState(initial.homeScore);
@@ -369,7 +373,7 @@ export function OverlayStrip({
     return () => clearInterval(t);
   }, [raidRunning]);
 
-  const remaining = Math.max(0, HALF_SECONDS - clock);
+  const remaining = Math.max(0, halfSeconds - clock);
   const homeAttacking = attackingTeamId === home.id;
   const awayAttacking = attackingTeamId === away.id;
   const dodActive =

@@ -39,7 +39,7 @@ export default async function PublicLivePage({
   const { data: match } = await supabase
     .from('matches')
     .select(
-      `id, scheduled_at, status, round, home_score, away_score, current_half, clock_seconds, tournament_id, current_raider_id, current_attacking_team_id,
+      `id, scheduled_at, status, round, home_score, away_score, current_half, clock_seconds, half_seconds, tournament_id, current_raider_id, current_attacking_team_id,
        home_team:home_team_id(id, name, short_name, primary_color),
        away_team:away_team_id(id, name, short_name, primary_color),
        tournament:tournament_id(name, slug, tenant:tenant_id(slug, name))`,
@@ -182,6 +182,7 @@ export default async function PublicLivePage({
             awayScore: match.away_score,
             currentHalf: match.current_half,
             clockSeconds: match.clock_seconds,
+            halfSeconds: match.half_seconds ?? 1800,
             scheduledAt: match.scheduled_at,
             round: match.round,
             // @ts-expect-error supabase nested

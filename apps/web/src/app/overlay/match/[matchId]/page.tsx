@@ -39,7 +39,7 @@ export default async function OverlayPage({
   const { data: match } = await supabase
     .from('matches')
     .select(
-      `id, status, home_score, away_score, current_half, clock_seconds,
+      `id, status, home_score, away_score, current_half, clock_seconds, half_seconds,
        current_raider_id, current_attacking_team_id,
        home_dod_counter, away_dod_counter,
        home_team_id, away_team_id,
@@ -154,6 +154,7 @@ export default async function OverlayPage({
         awayScore: match.away_score,
         currentHalf: match.current_half,
         clockSeconds: match.clock_seconds,
+        halfSeconds: match.half_seconds ?? 1800,
         currentAttackingTeamId: match.current_attacking_team_id ?? null,
         homeDodCounter: match.home_dod_counter ?? 0,
         awayDodCounter: match.away_dod_counter ?? 0,

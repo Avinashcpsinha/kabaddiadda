@@ -24,13 +24,17 @@ export default async function LineupsPage({
   const { data: match } = await supabase
     .from('matches')
     .select(
-      'id, status, scheduled_at, round, home_team_id, away_team_id, home_team:home_team_id(id, name, short_name, primary_color), away_team:away_team_id(id, name, short_name, primary_color)',
+      'id, status, scheduled_at, round, home_team_id, away_team_id, half_seconds, home_team:home_team_id(id, name, short_name, primary_color), away_team:away_team_id(id, name, short_name, primary_color)',
     )
     .eq('id', matchId)
     .eq('tenant_id', user!.tenantId!)
     .maybeSingle();
 
   if (!match) notFound();
+
+  // Default to 30 min if the column hasn't been backfilled. The migration
+  // sets a default of 1800 so this is a belt-and-braces guard.
+  const initialHalfMinutes = Math.round((match.half_seconds ?? 1800) / 60);
 
   const teamIds = [match.home_team_id, match.away_team_id];
 
@@ -99,6 +103,7 @@ export default async function LineupsPage({
         awayRoster={awayRoster}
         initialHome={initialHome}
         initialAway={initialAway}
+        initialHalfMinutes={initialHalfMinutes}
         locked={locked}
       />
     </div>
