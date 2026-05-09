@@ -98,28 +98,49 @@ export default async function PublicLivePage({
       .filter((p): p is { fullName: string; jerseyNumber: number | null } => p !== null),
   }));
 
-  // Lineup-derived player slots — drives the green/red on-mat indicators
-  // under each team name. Mirrors what the scoring console shows.
-  const [lineupsRes, statesRes] = await Promise.all([
-    supabase
-      .from('match_lineups')
-      .select('team_id, starting_player_ids')
-      .eq('match_id', matchId),
-    supabase
-      .from('match_player_state')
-      .select('player_id, team_id, state')
-      .eq('match_id', matchId),
-  ]);
-  const stateById = new Map<string, string>(
-    (statesRes.data ?? []).map((s) => [s.player_id, s.state]),
-  );
+  // Player-state-derived slots — every rostered player on each team
+  // (mat / bench / out / suspended / red-carded). Drives both the
+  // on-mat dot strip in the scoreboard and the full TeamRoster panels
+  // alongside the commentary feed.
+  const { data: states } = await supabase
+    .from('match_player_state')
+    .select('player_id, team_id, state')
+    .eq('match_id', matchId);
+
+  // Look up names + jerseys + roles for every player in any state row.
+  const slotPlayerIds = Array.from(new Set((states ?? []).map((s) => s.player_id)));
+  const slotPlayerById = new Map<
+    string,
+    { full_name: string; jersey_number: number | null; role: string }
+  >();
+  if (slotPlayerIds.length > 0) {
+    const { data: rosterPlayers } = await supabase
+      .from('players')
+      .select('id, full_name, jersey_number, role')
+      .in('id', slotPlayerIds);
+    for (const p of rosterPlayers ?? []) {
+      slotPlayerById.set(p.id, {
+        full_name: p.full_name,
+        jersey_number: p.jersey_number,
+        role: p.role,
+      });
+    }
+  }
+
   function buildSlots(teamId: string) {
-    const lineup = lineupsRes.data?.find((l) => l.team_id === teamId);
-    const ids = (lineup?.starting_player_ids ?? []) as string[];
-    return ids.map((playerId) => ({
-      playerId,
-      state: stateById.get(playerId) ?? 'on_mat',
-    }));
+    return (states ?? [])
+      .filter((s) => s.team_id === teamId)
+      .map((s) => {
+        const p = slotPlayerById.get(s.player_id);
+        return {
+          playerId: s.player_id,
+          state: s.state,
+          fullName: p?.full_name ?? 'Unknown',
+          jerseyNumber: p?.jersey_number ?? null,
+          role: p?.role ?? 'all_rounder',
+        };
+      })
+      .sort((a, b) => (a.jerseyNumber ?? 9999) - (b.jerseyNumber ?? 9999));
   }
   // @ts-expect-error supabase nested join
   const homeId: string = match.home_team.id;

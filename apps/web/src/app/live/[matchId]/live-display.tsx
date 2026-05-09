@@ -28,6 +28,10 @@ interface PlayerRef {
 interface PlayerSlot {
   playerId: string;
   state: string;
+  fullName: string;
+  jerseyNumber: number | null;
+  /** raider / defender_corner / defender_cover / all_rounder */
+  role: string;
 }
 
 interface LiveEvent {
@@ -461,8 +465,10 @@ export function LiveMatchDisplay({
         </Card>
       )}
 
-      {/* COMMENTARY + STATS */}
-      <div className="grid gap-4 md:grid-cols-[1fr_280px]">
+      {/* TEAM 1 PLAYERS · COMMENTARY · TEAM 2 PLAYERS */}
+      <div className="grid gap-4 lg:grid-cols-[260px_1fr_260px]">
+        <TeamRoster team={home} slots={homeSlots} side="home" />
+
         <Card>
           <CardContent className="p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
@@ -522,6 +528,13 @@ export function LiveMatchDisplay({
           </CardContent>
         </Card>
 
+        <TeamRoster team={away} slots={awaySlots} side="away" />
+      </div>
+
+      {/* MATCH STATS — sits below the 3-column row so the player rosters
+          and commentary keep first-screen real estate. */}
+      <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+        <div className="hidden lg:block" />
         <Card>
           <CardContent className="p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
@@ -577,6 +590,153 @@ export function LiveMatchDisplay({
         </Card>
       </div>
     </div>
+  );
+}
+
+/**
+ * Roster panel shown alongside the commentary feed. Lists every rostered
+ * player on a team with their current state, sorted by jersey number.
+ *
+ * Status conventions (matching the scoring console + lineup builder):
+ *   on_mat     — green dot, full opacity. Currently on the kabaddi mat.
+ *   bench      — slate dot, slightly dimmed. Substitute available.
+ *   out        — red dot, strikethrough name. Touched / tackled out.
+ *   suspended  — amber dot. Yellow-card suspension still active.
+ *   red_carded — dark red dot, removed from the field for the match.
+ */
+function TeamRoster({
+  team,
+  slots,
+  side,
+}: {
+  team: TeamLite;
+  slots: PlayerSlot[];
+  side: 'home' | 'away';
+}) {
+  const onMatCount = slots.filter((s) => s.state === 'on_mat').length;
+  const total = slots.length;
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-white"
+              style={{
+                background: team.primary_color
+                  ? `linear-gradient(135deg, ${team.primary_color}, ${team.primary_color}cc)`
+                  : 'linear-gradient(135deg, hsl(var(--primary)), #0052a3)',
+              }}
+            >
+              {team.short_name || initials(team.name)}
+            </div>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold">{team.name}</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                {side === 'home' ? 'Home' : 'Away'} · {onMatCount}/{total} on mat
+              </div>
+            </div>
+          </div>
+        </div>
+        {slots.length === 0 ? (
+          <p className="rounded-md border border-dashed border-border/60 p-3 text-center text-xs text-muted-foreground">
+            Lineup not set yet.
+          </p>
+        ) : (
+          <ul className="space-y-1">
+            {slots.map((s) => (
+              <PlayerRow key={s.playerId} slot={s} />
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PlayerRow({ slot }: { slot: PlayerSlot }) {
+  const dotClass =
+    slot.state === 'on_mat'
+      ? 'bg-emerald-500 ring-emerald-500/40'
+      : slot.state === 'bench'
+        ? 'bg-slate-400 ring-slate-400/40'
+        : slot.state === 'out'
+          ? 'bg-red-500 ring-red-500/40'
+          : slot.state === 'suspended'
+            ? 'bg-amber-500 ring-amber-500/40'
+            : slot.state === 'red_carded'
+              ? 'bg-red-700 ring-red-700/40'
+              : 'bg-muted-foreground ring-muted-foreground/40';
+  const stateLabel =
+    slot.state === 'on_mat'
+      ? 'On mat'
+      : slot.state === 'bench'
+        ? 'Bench'
+        : slot.state === 'out'
+          ? 'Out'
+          : slot.state === 'suspended'
+            ? 'Susp'
+            : slot.state === 'red_carded'
+              ? 'Red'
+              : slot.state;
+  const roleLabel =
+    slot.role === 'raider'
+      ? 'R'
+      : slot.role === 'defender_corner'
+        ? 'CN'
+        : slot.role === 'defender_cover'
+          ? 'CV'
+          : 'AR';
+  return (
+    <li
+      className={cn(
+        'flex items-center gap-2 rounded-md border border-border/40 bg-card/50 px-2 py-1.5 text-xs',
+        slot.state === 'red_carded' && 'opacity-60',
+      )}
+    >
+      <span
+        className={cn('h-2 w-2 shrink-0 rounded-full ring-1', dotClass)}
+        aria-hidden
+      />
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted font-mono text-[9px] font-bold text-muted-foreground">
+        {slot.jerseyNumber ?? '?'}
+      </span>
+      <span
+        className={cn(
+          'min-w-0 flex-1 truncate font-medium',
+          slot.state === 'out' && 'line-through text-muted-foreground',
+          slot.state === 'red_carded' && 'line-through text-muted-foreground',
+        )}
+      >
+        {slot.fullName}
+      </span>
+      <span
+        className="shrink-0 rounded bg-muted/60 px-1 py-0.5 font-mono text-[8px] font-bold uppercase tracking-wider text-muted-foreground"
+        title={
+          slot.role === 'raider'
+            ? 'Raider'
+            : slot.role === 'defender_corner'
+              ? 'Defender (corner)'
+              : slot.role === 'defender_cover'
+                ? 'Defender (cover)'
+                : 'All-rounder'
+        }
+      >
+        {roleLabel}
+      </span>
+      <span
+        className={cn(
+          'shrink-0 rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider',
+          slot.state === 'on_mat' && 'bg-emerald-500/15 text-emerald-600',
+          slot.state === 'bench' && 'bg-slate-400/15 text-slate-500',
+          slot.state === 'out' && 'bg-red-500/15 text-red-600',
+          slot.state === 'suspended' && 'bg-amber-500/15 text-amber-600',
+          slot.state === 'red_carded' && 'bg-red-700/15 text-red-700',
+        )}
+      >
+        {stateLabel}
+      </span>
+    </li>
   );
 }
 
