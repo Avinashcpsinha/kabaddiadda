@@ -55,7 +55,7 @@ import {
   recordSubstitutionAction,
   recordTechPointAction,
   setMatchStatusAction,
-  swapOutSeqAction,
+  swapPlayerStatesAction,
   type EventType,
 } from '../actions';
 
@@ -703,6 +703,9 @@ export function ScoringConsole({
     setSwapFirstId(null);
   }
 
+  // Swap flow: first tap is the OUT (died) player, second tap is the
+  // ON-MAT (live) player. Their states exchange — the dead one revives,
+  // the live one goes out. Used to fix tag-the-wrong-defender mistakes.
   function handleSwapTap(playerId: string) {
     if (swapFirstId === null) {
       setSwapFirstId(playerId);
@@ -713,15 +716,15 @@ export function ScoringConsole({
       setSwapFirstId(null);
       return;
     }
-    const a = swapFirstId;
-    const b = playerId;
+    const outPlayerId = swapFirstId;
+    const livePlayerId = playerId;
     exitSwapMode();
     startTransition(async () => {
-      const res = await swapOutSeqAction({
+      const res = await swapPlayerStatesAction({
         matchId,
         tournamentId,
-        playerAId: a,
-        playerBId: b,
+        outPlayerId,
+        livePlayerId,
       });
       if (res?.error) toast.error(res.error);
       else router.refresh();
@@ -1407,8 +1410,8 @@ export function ScoringConsole({
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
                   {swapMode
                     ? swapFirstId
-                      ? 'Swap mode · pick the second OUT defender to swap with'
-                      : 'Swap mode · pick the first OUT defender'
+                      ? 'Swap · now pick the LIVE player to bring off the mat'
+                      : 'Swap · pick the OUT (died) player to bring back on mat'
                     : raiderId
                       ? `Raid in progress · ${actionsThisRaid} action${actionsThisRaid === 1 ? '' : 's'} so far`
                       : 'Pick players for this raid'}
@@ -1433,11 +1436,13 @@ export function ScoringConsole({
                       Complete Raid
                     </Button>
                   )}
-                  {/* Swap-order toggle: surfaces only when the defending team
-                      has 2+ OUT players (anything fewer can't be swapped).
-                      Disabled while a raid action queue is pending so the
-                      operator finishes the in-flight raid first. */}
-                  {defendingSlots.filter((s) => s.state === 'out').length >= 2 &&
+                  {/* Swap toggle: surfaces only when the defending team has
+                      at least one OUT player AND at least one on-mat player —
+                      the swap only makes sense when both sides exist. Hidden
+                      while a raid action queue is pending so the operator
+                      finishes the in-flight raid first. */}
+                  {defendingSlots.some((s) => s.state === 'out') &&
+                    defendingSlots.some((s) => s.state === 'on_mat') &&
                     pendingActions.length === 0 && (
                       <button
                         type="button"
@@ -1449,9 +1454,9 @@ export function ScoringConsole({
                             ? 'border-amber-500 bg-amber-500/15 text-amber-600'
                             : 'border-border text-muted-foreground hover:border-amber-500 hover:text-amber-600',
                         )}
-                        title="Swap two OUT defenders' positions in the revival queue"
+                        title="Swap an OUT player with an ON-MAT player on the same team"
                       >
-                        {swapMode ? 'Cancel swap' : 'Swap order'}
+                        {swapMode ? 'Cancel swap' : 'Swap'}
                       </button>
                     )}
                   {(raiderId || touchedCount > 0) && !swapMode && (
@@ -1501,8 +1506,8 @@ export function ScoringConsole({
                   helperText={
                     swapMode
                       ? swapFirstId
-                        ? 'Pick second'
-                        : 'Pick first'
+                        ? 'Pick LIVE'
+                        : 'Pick OUT'
                       : touchedCount > 0
                         ? `${touchedCount} selected`
                         : 'Tap any'
@@ -1511,25 +1516,16 @@ export function ScoringConsole({
                   {defendingSlots.length === 0 ? (
                     <PickerEmpty />
                   ) : (
-                    (() => {
-                      // Queue badges (1, 2, 3, ...) on OUT defenders — only
-                      // shown in swap mode so normal-mode picker stays clean.
-                      // Sorted by out_seq ascending; nulls treated as Infinity
-                      // so they end up last (shouldn't happen for OUT rows
-                      // but be defensive).
-                      const queueOrder = swapMode
-                        ? defendingSlots
-                            .filter((s) => s.state === 'out')
-                            .slice()
-                            .sort(
-                              (a, b) =>
-                                (a.outSeq ?? Number.POSITIVE_INFINITY) -
-                                (b.outSeq ?? Number.POSITIVE_INFINITY),
-                            )
-                            .map((s, i) => [s.playerId, i + 1] as const)
-                        : [];
-                      const queueByPlayer = new Map<string, number>(queueOrder);
-                      return defendingSlots.map((s) => (
+                    defendingSlots.map((s) => {
+                      // In swap mode, the picker becomes a two-step state-swap:
+                      // first tap picks an OUT player, second tap picks an
+                      // ON-MAT player. Disabled rules flip after the first tap.
+                      const swapDisabled =
+                        swapMode &&
+                        (swapFirstId === null
+                          ? s.state !== 'out'
+                          : s.state !== 'on_mat' && s.playerId !== swapFirstId);
+                      return (
                         <PlayerChip
                           key={s.playerId}
                           slot={s}
@@ -1539,16 +1535,13 @@ export function ScoringConsole({
                               : touchedDefenderIds.includes(s.playerId)
                           }
                           tone="defend"
-                          disabled={
-                            swapMode ? s.state !== 'out' : s.state !== 'on_mat'
-                          }
-                          queueBadge={swapMode ? queueByPlayer.get(s.playerId) : undefined}
+                          disabled={swapMode ? swapDisabled : s.state !== 'on_mat'}
                           onClick={() =>
                             swapMode ? handleSwapTap(s.playerId) : toggleDefender(s.playerId)
                           }
                         />
-                      ));
-                    })()
+                      );
+                    })
                   )}
                 </PickerColumn>
               </div>
@@ -2784,7 +2777,6 @@ function PlayerChip({
   tone,
   disabled,
   onClick,
-  queueBadge,
 }: {
   slot: PlayerSlot;
   selected: boolean;
@@ -2792,8 +2784,6 @@ function PlayerChip({
   tone: 'attack' | 'defend';
   disabled?: boolean;
   onClick: () => void;
-  /** Revival queue position (1, 2, 3, …) shown only in swap mode. */
-  queueBadge?: number;
 }) {
   const baseClass = 'flex items-center gap-2 rounded-md border-2 px-2 py-1.5 text-left text-xs transition-all';
   const stateClass = disabled
@@ -2862,14 +2852,6 @@ function PlayerChip({
       >
         {slot.fullName}
       </span>
-      {queueBadge != null && (
-        <span
-          className="rounded bg-amber-500/20 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700"
-          title={`Revival queue position #${queueBadge}`}
-        >
-          #{queueBadge}
-        </span>
-      )}
       {slot.state === 'out' && (
         <span className="rounded bg-red-500/15 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-500">
           OUT

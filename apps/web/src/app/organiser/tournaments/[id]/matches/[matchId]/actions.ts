@@ -947,22 +947,28 @@ export async function adjustScoreAction(input: {
 }
 
 /**
- * Swap the `out_seq` (revival queue position) of two OUT defenders. Used when
- * the on-mat sequence the operator captured (typically during a multi-touch
- * raid) doesn't match what really happened, so the wrong defender is queued
- * to revive next. Both players must currently be in `state = 'out'` on this
- * match. The DB revive function (`match_player_state_revive_one`) keeps
- * picking the lowest out_seq — we just rearrange who that is.
+ * Swap the on-mat / out states of two players on the same team. Used when
+ * the operator tagged the wrong defender during a raid — the wrong player
+ * went out, the right one is still on the mat. This corrects it without
+ * rolling back the underlying scoring event.
+ *
+ *   outPlayerId   → was out → comes back on mat (out_seq cleared)
+ *   livePlayerId  → was on  → goes out (inherits the previous out_seq, so
+ *                              the revival queue position is preserved)
+ *
+ * Both players must be on the same team; the OUT one must be `state='out'`
+ * and the LIVE one must be `state='on_mat'`. Suspended / red-carded
+ * players cannot be swap targets — they're locked out by the rules.
  */
-export async function swapOutSeqAction(input: {
+export async function swapPlayerStatesAction(input: {
   matchId: string;
   tournamentId: string;
-  playerAId: string;
-  playerBId: string;
+  outPlayerId: string;
+  livePlayerId: string;
 }) {
   const user = await getSessionUser();
   if (!user?.tenantId) return { error: 'Not authorised' };
-  if (input.playerAId === input.playerBId) return { error: 'Pick two different players' };
+  if (input.outPlayerId === input.livePlayerId) return { error: 'Pick two different players' };
 
   const supabase = await createClient();
 
@@ -970,32 +976,32 @@ export async function swapOutSeqAction(input: {
     .from('match_player_state')
     .select('player_id, team_id, state, out_seq')
     .eq('match_id', input.matchId)
-    .in('player_id', [input.playerAId, input.playerBId]);
+    .in('player_id', [input.outPlayerId, input.livePlayerId]);
   if (fetchErr) return { error: fetchErr.message };
   if ((rows ?? []).length !== 2) return { error: 'Players not found in this match' };
 
-  const a = rows.find((r) => r.player_id === input.playerAId);
-  const b = rows.find((r) => r.player_id === input.playerBId);
-  if (!a || !b) return { error: 'Players not found' };
-  if (a.state !== 'out' || b.state !== 'out') return { error: 'Both players must be OUT' };
-  if (a.team_id !== b.team_id) return { error: 'Players must be on the same team' };
+  const out = rows.find((r) => r.player_id === input.outPlayerId);
+  const live = rows.find((r) => r.player_id === input.livePlayerId);
+  if (!out || !live) return { error: 'Players not found' };
+  if (out.state !== 'out') return { error: 'First selection must be an OUT player' };
+  if (live.state !== 'on_mat') return { error: 'Second selection must be an ON-MAT player' };
+  if (out.team_id !== live.team_id) return { error: 'Players must be on the same team' };
 
-  // Two updates, not atomic — but `out_seq` has no unique constraint so an
-  // overlap during the brief window between writes can't conflict. The worst
-  // case (a concurrent revive landing between updates) just picks one of the
-  // two players; acceptable for this rarely-clicked manual override.
+  // Two updates, not strictly atomic. The state column drives every gate
+  // that matters, so the brief window between writes only risks a concurrent
+  // revive event landing — acceptable for a rarely-used manual override.
   const { error: e1 } = await supabase
     .from('match_player_state')
-    .update({ out_seq: b.out_seq })
+    .update({ state: 'on_mat', out_seq: null })
     .eq('match_id', input.matchId)
-    .eq('player_id', input.playerAId);
+    .eq('player_id', input.outPlayerId);
   if (e1) return { error: e1.message };
 
   const { error: e2 } = await supabase
     .from('match_player_state')
-    .update({ out_seq: a.out_seq })
+    .update({ state: 'out', out_seq: out.out_seq })
     .eq('match_id', input.matchId)
-    .eq('player_id', input.playerBId);
+    .eq('player_id', input.livePlayerId);
   if (e2) return { error: e2.message };
 
   revalidatePath(`/organiser/tournaments/${input.tournamentId}/matches/${input.matchId}/scoring`);
