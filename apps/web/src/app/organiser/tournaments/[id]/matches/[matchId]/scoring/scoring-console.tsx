@@ -754,7 +754,23 @@ export function ScoringConsole({
     }
     const outPlayerId = swapFirstId;
     const livePlayerId = playerId;
+    // Look up names from the defending slots so the loading + success
+    // toasts can mention the actual players. Falls back to "player" if
+    // anything is missing.
+    const allSlots = [...homeSlots, ...awaySlots];
+    const outPlayer = allSlots.find((s) => s.playerId === outPlayerId);
+    const livePlayer = allSlots.find((s) => s.playerId === livePlayerId);
+    const fmt = (slot: PlayerSlot | undefined) =>
+      slot
+        ? slot.jerseyNumber != null
+          ? `${slot.fullName} #${slot.jerseyNumber}`
+          : slot.fullName
+        : 'player';
+    const outLabel = fmt(outPlayer);
+    const liveLabel = fmt(livePlayer);
+
     exitSwapMode();
+    const toastId = toast.loading(`Swapping ${outLabel} ↔ ${liveLabel}…`);
     startTransition(async () => {
       const res = await swapPlayerStatesAction({
         matchId,
@@ -762,8 +778,14 @@ export function ScoringConsole({
         outPlayerId,
         livePlayerId,
       });
-      if (res?.error) toast.error(res.error);
-      else router.refresh();
+      if (res?.error) {
+        toast.error(res.error, { id: toastId });
+      } else {
+        toast.success(`Swapped: ${outLabel} → on mat, ${liveLabel} → out`, {
+          id: toastId,
+        });
+        router.refresh();
+      }
     });
   }
 
