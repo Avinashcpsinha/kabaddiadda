@@ -703,6 +703,42 @@ export function ScoringConsole({
     setSwapFirstId(null);
   }
 
+  /**
+   * Manually add minutes to the match clock. The clock counts UP to
+   * HALF_SECONDS, so "adding" minutes means rolling the elapsed value
+   * BACK by that many seconds (extending the time remaining).
+   *
+   * Locked to status='live' AND running=false — can only adjust while
+   * the match is paused. Otherwise the clock would tick over our write
+   * within the next second. Persists immediately so a refresh / public
+   * live page reflects the adjustment without waiting for the 5s flush.
+   */
+  function adjustMatchClock(addSeconds: number) {
+    if (status !== 'live') {
+      toast.error('Match must be live to adjust the clock');
+      return;
+    }
+    if (running) {
+      toast.error('Pause the clock first, then add time');
+      return;
+    }
+    if (addSeconds <= 0) return;
+    const next = Math.max(0, Math.min(HALF_SECONDS, clock - addSeconds));
+    setClock(next);
+    void persistTimerStateAction({
+      matchId,
+      clockSeconds: next,
+      currentHalf: half,
+      currentRaiderId: raiderId,
+      currentAttackingTeamId: raiderId ? attackingId : null,
+      raidSecondsLeft: raidLeft,
+    });
+    const minutes = Math.round((addSeconds / 60) * 10) / 10;
+    toast.success(
+      `+${minutes} ${minutes === 1 ? 'minute' : 'minutes'} added to the match clock`,
+    );
+  }
+
   // Swap flow: first tap is the OUT (died) player, second tap is the
   // ON-MAT (live) player. Their states exchange — the dead one revives,
   // the live one goes out. Used to fix tag-the-wrong-defender mistakes.
@@ -1212,6 +1248,14 @@ export function ScoringConsole({
                 :{(remaining % 60).toString().padStart(2, '0')}
               </span>
               <StatusPill status={status} />
+              {/* Add-time control. Only renders when the match is paused —
+                  otherwise the next 1s tick would overwrite our adjustment.
+                  Lets the operator extend the half (timeouts, injuries,
+                  ref discussions) by 1 / 2 / 5 minutes via quick buttons,
+                  or any whole number of minutes via the input. */}
+              {status === 'live' && !running && (
+                <AddTimeControl onAdd={adjustMatchClock} />
+              )}
             </div>
 
             {/* Raid timer */}
@@ -2868,6 +2912,99 @@ function PlayerChip({
         </span>
       )}
     </button>
+  );
+}
+
+/**
+ * Inline popover for adding minutes to the paused match clock. Quick
+ * buttons (+1m / +2m / +5m) for the common cases plus a freeform input
+ * for arbitrary minutes. Closes on outside click or after a successful
+ * add. The visibility gate (only when paused) is enforced by the
+ * caller — this component itself stays simple.
+ */
+function AddTimeControl({ onAdd }: { onAdd: (seconds: number) => void }) {
+  const [open, setOpen] = React.useState(false);
+  const [minutes, setMinutes] = React.useState('1');
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (!containerRef.current) return;
+      if (!containerRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  function commit(seconds: number) {
+    onAdd(seconds);
+    setOpen(false);
+  }
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const n = parseInt(minutes, 10);
+    if (!Number.isFinite(n) || n <= 0) return;
+    commit(n * 60);
+  }
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+        title="Add time to the match clock (paused only)"
+        aria-label="Add time to the match clock"
+        aria-expanded={open}
+      >
+        <Plus className="h-3 w-3" />
+        Time
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-30 mt-1.5 w-60 rounded-md border border-border bg-popover p-3 text-popover-foreground shadow-lg">
+          <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            Add to match clock
+          </div>
+          <div className="mb-2 grid grid-cols-3 gap-1.5">
+            {[1, 2, 5].map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => commit(m * 60)}
+                className="rounded-md border border-border px-2 py-1.5 text-xs font-semibold transition-colors hover:border-primary hover:bg-primary/10 hover:text-primary"
+              >
+                +{m}m
+              </button>
+            ))}
+          </div>
+          <form onSubmit={onSubmit} className="flex items-center gap-1.5">
+            <input
+              type="number"
+              min={1}
+              max={60}
+              step={1}
+              value={minutes}
+              onChange={(e) => setMinutes(e.target.value)}
+              className="h-8 flex-1 rounded-md border border-input bg-background px-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-ring"
+              aria-label="Minutes to add"
+              autoFocus
+            />
+            <span className="text-xs text-muted-foreground">min</span>
+            <button
+              type="submit"
+              className="h-8 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+            >
+              Add
+            </button>
+          </form>
+          <p className="mt-2 text-[10px] text-muted-foreground">
+            Adds time to the half. Use for timeouts, injuries, ref discussions.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 
