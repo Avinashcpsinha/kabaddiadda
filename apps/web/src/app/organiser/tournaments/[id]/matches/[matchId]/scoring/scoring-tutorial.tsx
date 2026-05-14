@@ -153,26 +153,33 @@ export function ScoringTutorial({ autoStart }: { autoStart: boolean }) {
   if (!show) return null;
 
   return (
-    <button
-      type="button"
-      onClick={runManually}
-      onAuxClick={dismissPrompt}
-      aria-label="Show scoring tutorial"
-      className="fixed bottom-5 right-24 z-30 inline-flex h-10 items-center gap-2 rounded-full border border-border bg-card/95 px-3 text-xs font-semibold text-foreground shadow-lg backdrop-blur transition hover:scale-105 hover:bg-accent"
-    >
-      <HelpCircle className="h-4 w-4" />
-      <span className="hidden sm:inline">Show tour</span>
-      <span
-        onClick={(e) => {
-          e.stopPropagation();
-          dismissPrompt();
-        }}
-        className="-mr-1 ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-foreground"
-        aria-label="Hide tour button"
-        role="button"
-      >
-        <X className="h-3 w-3" />
-      </span>
-    </button>
+    <div className="fixed bottom-5 left-5 z-40 sm:bottom-7 sm:left-7">
+      <div className="relative">
+        {/* Soft pulse so the eye finds it. Lower opacity than the demo FAB
+            since this lives inside the organiser console — present but not
+            screaming. */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-full bg-sky-500 opacity-30 motion-safe:animate-ping"
+        />
+        <button
+          type="button"
+          onClick={runManually}
+          aria-label="Show scoring tutorial"
+          className="relative inline-flex h-12 items-center gap-2 rounded-full bg-gradient-to-r from-sky-500 via-blue-500 to-indigo-500 px-5 text-sm font-bold text-white shadow-xl shadow-sky-500/40 ring-1 ring-white/20 transition hover:scale-105 hover:shadow-2xl hover:shadow-sky-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+        >
+          <HelpCircle className="h-4 w-4" />
+          <span>How to score</span>
+        </button>
+        <button
+          type="button"
+          onClick={dismissPrompt}
+          className="absolute -right-1 -top-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow transition hover:bg-accent hover:text-foreground"
+          aria-label="Hide tour button"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+    </div>
   );
 }
