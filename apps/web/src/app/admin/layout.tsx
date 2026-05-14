@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import {
   Activity,
+  BarChart3,
   Building2,
   Crown,
   FileText,
@@ -17,6 +18,7 @@ const ICON = 'h-4 w-4';
 
 const NAV: NavItem[] = [
   { href: '/admin', label: 'Overview', icon: <LayoutDashboard className={ICON} /> },
+  { href: '/admin/traffic', label: 'Traffic', icon: <BarChart3 className={ICON} /> },
   { href: '/admin/tenants', label: 'Tenants', icon: <Building2 className={ICON} /> },
   { href: '/admin/users', label: 'Users', icon: <Users className={ICON} /> },
   { href: '/admin/plans', label: 'Plans & billing', icon: <Crown className={ICON} /> },
