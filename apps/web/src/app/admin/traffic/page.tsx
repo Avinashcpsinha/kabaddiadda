@@ -79,20 +79,34 @@ export default async function AdminTrafficPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Traffic & registrations</h1>
           <p className="mt-1 text-muted-foreground">
-            Who's joining the platform. Anonymous visitor traffic lives in Vercel Analytics.
+            Registrations live in your DB. Per-visitor IP, page, location, and
+            referrer are in PostHog. Aggregate counts are in Vercel Analytics.
           </p>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <a
-            href="https://vercel.com/dashboard"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="gap-2"
-          >
-            Open Vercel Analytics
-            <ExternalLink className="h-3 w-3" />
-          </a>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="default" size="sm">
+            <a
+              href="https://us.posthog.com/project/423796/activity/explore"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="gap-2"
+            >
+              Live visitors (PostHog)
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <a
+              href="https://vercel.com/dashboard"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="gap-2"
+            >
+              Vercel Analytics
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
