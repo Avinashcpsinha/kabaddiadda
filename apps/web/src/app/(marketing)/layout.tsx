@@ -1,5 +1,6 @@
 import { SiteHeader } from '@/components/site-header';
 import { SiteFooter } from '@/components/site-footer';
+import { TryDemoFab } from '@/components/try-demo-fab';
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -7,6 +8,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
       <SiteHeader />
       <main className="flex-1">{children}</main>
       <SiteFooter />
+      <TryDemoFab />
     </div>
   );
 }
