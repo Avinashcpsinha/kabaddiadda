@@ -46,8 +46,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-background font-sans antialiased">
         <ThemeProvider
           attribute="class"
-          defaultTheme="light"
-          storageKey="kbd-theme-v2"
+          defaultTheme="dark"
+          storageKey="kbd-theme-v3"
           disableTransitionOnChange
         >
           {children}
