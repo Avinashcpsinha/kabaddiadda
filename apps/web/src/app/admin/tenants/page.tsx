@@ -55,7 +55,7 @@ export default async function AdminTenantsPage({
       const q = supabase
         .from('tenants')
         .select(
-          'id, slug, name, custom_domain, status, plan, plan_status, owner_id, contact_email, created_at, owner:owner_id(full_name, email)',
+          'id, slug, name, custom_domain, status, plan, plan_status, owner_id, contact_email, created_at',
         )
         .order('created_at', { ascending: false })
         .limit(500);
@@ -65,7 +65,27 @@ export default async function AdminTenantsPage({
     supabase.from('tournaments').select('tenant_id'),
   ]);
 
-  const rows = (rowsRes.data ?? []) as unknown as TenantRow[];
+  // tenants.owner_id has no FK constraint to profiles (see 0001_init.sql),
+  // so Supabase's embed syntax can't resolve the relationship. Hydrate owners
+  // with a second query and stitch them in.
+  const rawRows = (rowsRes.data ?? []) as Omit<TenantRow, 'owner'>[];
+  const ownerIds = Array.from(
+    new Set(rawRows.map((t) => t.owner_id).filter((id): id is string => !!id)),
+  );
+  const ownersById = new Map<string, { full_name: string | null; email: string }>();
+  if (ownerIds.length > 0) {
+    const { data: ownersData } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', ownerIds);
+    for (const o of ownersData ?? []) {
+      ownersById.set(o.id, { full_name: o.full_name, email: o.email });
+    }
+  }
+  const rows: TenantRow[] = rawRows.map((t) => ({
+    ...t,
+    owner: t.owner_id ? ownersById.get(t.owner_id) ?? null : null,
+  }));
 
   // Build a per-tenant tournament count for the table.
   const tournamentsByTenant = new Map<string, number>();
