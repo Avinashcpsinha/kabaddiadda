@@ -5,6 +5,7 @@ import NextTopLoader from 'nextjs-toploader';
 import { ThemeProvider } from '@/components/theme-provider';
 import { PostHogProvider } from '@/components/posthog-provider';
 import { FeedbackWidget } from '@/components/feedback/feedback-widget';
+import { WhatsAppFab } from '@/components/whatsapp-fab';
 import { Toaster } from 'sonner';
 import './globals.css';
 
@@ -62,6 +63,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           <PostHogProvider>{children}</PostHogProvider>
           <FeedbackWidget />
+          <WhatsAppFab />
           <Toaster richColors closeButton position="top-right" />
         </ThemeProvider>
         <Analytics />
