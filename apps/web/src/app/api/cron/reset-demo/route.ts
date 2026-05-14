@@ -1,15 +1,17 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { reseedDemoTenant } from '@/lib/demo-seed';
+import { cleanupExpiredDemoSessions } from '@/lib/demo-seed';
 
 /**
- * Nightly cron — resets the demo tenant to its canonical seeded state.
+ * Nightly cron — deletes demo organiser accounts (and their cascade-linked
+ * tenants/data) older than 24 hours. Each "Try live scoring" click spawns
+ * a new ephemeral account, so without this cleanup the auth user list
+ * grows without bound.
  *
- * Scheduled via vercel.json (3:00 IST / 21:30 UTC by default). Vercel cron
- * adds an Authorization: Bearer header using CRON_SECRET, set in Vercel
- * project env vars. Any request without that header gets a 401 so this
- * endpoint can't be hit by random callers to wipe the demo.
+ * Scheduled via vercel.json (21:30 UTC / 03:00 IST). Vercel cron adds an
+ * Authorization: Bearer header using CRON_SECRET (set in Vercel env vars).
+ * Without that secret the endpoint stays locked.
  *
- * Manual run (e.g. from your laptop):
+ * Manual run from your laptop:
  *   curl -H "Authorization: Bearer $CRON_SECRET" \
  *        https://your-domain/api/cron/reset-demo
  */
@@ -24,14 +26,14 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await reseedDemoTenant();
+    const result = await cleanupExpiredDemoSessions();
     return NextResponse.json({
       ok: true,
-      resetAt: new Date().toISOString(),
+      ranAt: new Date().toISOString(),
       ...result,
     });
   } catch (err) {
-    console.error('Demo reset failed:', err);
+    console.error('Demo cleanup failed:', err);
     return NextResponse.json(
       {
         ok: false,

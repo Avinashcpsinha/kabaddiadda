@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { dashboardPathForRole, getSessionUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
-import { DEMO_EMAIL, DEMO_LANDING_PATH, DEMO_PASSWORD } from '@/lib/demo';
+import { createDemoSession } from '@/lib/demo-seed';
 import { loginSchema, signupSchema } from '@kabaddiadda/shared';
 
 export async function signInAction(formData: FormData) {
@@ -72,18 +72,19 @@ export async function signOutAction() {
 }
 
 /**
- * One-click sign-in as the demo organiser, then drop the user straight into
- * the live scoring console. Credentials are imported server-side from
- * @/lib/demo and never flow through the client — the homepage button just
- * triggers this action.
+ * One-click "Try live scoring" — provisions a fresh, isolated demo organiser
+ * account + seeded league for THIS visitor, then signs them in. Each click
+ * spawns its own tenant so concurrent visitors never collide. Sessions
+ * older than 24 hours are reaped by /api/cron/reset-demo.
  */
-export async function signInAsDemoAction() {
+export async function tryDemoAction() {
+  const session = await createDemoSession();
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({
-    email: DEMO_EMAIL,
-    password: DEMO_PASSWORD,
+    email: session.email,
+    password: session.password,
   });
   if (error) return { error: error.message };
   revalidatePath('/', 'layout');
-  redirect(DEMO_LANDING_PATH);
+  redirect(session.liveMatchPath);
 }
