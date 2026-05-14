@@ -1,6 +1,6 @@
 import { AlertCircle, CheckCircle2, Globe, Save, Settings as SettingsIcon } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FormSubmit } from '@/components/form-submit';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { getSessionUser } from '@/lib/auth';
@@ -312,10 +312,10 @@ export default async function SettingsPage({
         </Card>
 
         <div className="flex justify-end">
-          <Button type="submit" variant="flame" size="lg">
+          <FormSubmit variant="flame" size="lg">
             <Save className="h-4 w-4" />
             Save settings
-          </Button>
+          </FormSubmit>
         </div>
       </form>
     </div>

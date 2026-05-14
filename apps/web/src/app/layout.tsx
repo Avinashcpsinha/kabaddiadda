@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter, JetBrains_Mono, Anton, Fraunces } from 'next/font/google';
 import { Analytics } from '@vercel/analytics/next';
+import NextTopLoader from 'nextjs-toploader';
 import { ThemeProvider } from '@/components/theme-provider';
 import { PostHogProvider } from '@/components/posthog-provider';
 import { FeedbackWidget } from '@/components/feedback/feedback-widget';
@@ -47,6 +48,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${fontSans.variable} ${fontMono.variable} ${fontDisplay.variable} ${fontEditorial.variable}`}
     >
       <body className="min-h-screen bg-background font-sans antialiased">
+        <NextTopLoader
+          color="#3b82f6"
+          height={3}
+          showSpinner={false}
+          shadow="0 0 10px #3b82f6,0 0 5px #3b82f6"
+        />
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"

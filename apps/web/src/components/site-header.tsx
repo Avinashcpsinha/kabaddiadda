@@ -4,6 +4,7 @@ import type { Role } from '@kabaddiadda/shared';
 import { signOutAction } from '@/app/(auth)/actions';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { FormSubmit } from '@/components/form-submit';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Logo } from '@/components/logo';
 import { getSessionUser, dashboardPathForRole } from '@/lib/auth';
@@ -67,9 +68,14 @@ export async function SiteHeader() {
                 <Link href={dashboardPathForRole(user.role)}>Dashboard</Link>
               </Button>
               <form action={signOutAction}>
-                <Button type="submit" variant="ghost" size="icon" aria-label="Sign out" title="Sign out">
+                <FormSubmit
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Sign out"
+                  title="Sign out"
+                >
                   <LogOut className="h-4 w-4" />
-                </Button>
+                </FormSubmit>
               </form>
             </div>
           ) : (

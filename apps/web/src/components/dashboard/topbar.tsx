@@ -2,6 +2,7 @@ import { Bell, LogOut, Search } from 'lucide-react';
 import { signOutAction } from '@/app/(auth)/actions';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { FormSubmit } from '@/components/form-submit';
 import { Input } from '@/components/ui/input';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { initials } from '@/lib/utils';
@@ -35,9 +36,14 @@ export function DashboardTopbar({ user }: { user: SessionUser | null }) {
               </div>
             </div>
             <form action={signOutAction}>
-              <Button variant="ghost" size="icon" aria-label="Sign out" title="Sign out">
+              <FormSubmit
+                variant="ghost"
+                size="icon"
+                aria-label="Sign out"
+                title="Sign out"
+              >
                 <LogOut className="h-4 w-4" />
-              </Button>
+              </FormSubmit>
             </form>
           </div>
         )}
