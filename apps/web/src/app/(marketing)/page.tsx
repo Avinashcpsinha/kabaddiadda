@@ -19,6 +19,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { HeroSceneBg } from '@/components/hero-scene-bg';
 import { AnimatedTagline } from '@/components/animated-tagline';
 import { PhoneMockup } from '@/components/phone-mockup';
+import { FormSubmit } from '@/components/form-submit';
+import { signInAsDemoAction } from '@/app/(auth)/actions';
 import { getSessionUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { cn } from '@/lib/utils';
@@ -196,6 +198,12 @@ function Hero({
                   Watch live
                 </Link>
               </Button>
+              <form action={signInAsDemoAction} className="contents">
+                <FormSubmit variant="outline" size="xl">
+                  <Sparkles className="h-4 w-4" />
+                  Try live scoring (demo)
+                </FormSubmit>
+              </form>
               <Link
                 href="/pricing"
                 className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"

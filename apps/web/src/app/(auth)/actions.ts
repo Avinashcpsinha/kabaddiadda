@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { dashboardPathForRole, getSessionUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
+import { DEMO_EMAIL, DEMO_LANDING_PATH, DEMO_PASSWORD } from '@/lib/demo';
 import { loginSchema, signupSchema } from '@kabaddiadda/shared';
 
 export async function signInAction(formData: FormData) {
@@ -68,4 +69,21 @@ export async function signOutAction() {
   await supabase.auth.signOut();
   revalidatePath('/', 'layout');
   redirect('/');
+}
+
+/**
+ * One-click sign-in as the demo organiser, then drop the user straight into
+ * the live scoring console. Credentials are imported server-side from
+ * @/lib/demo and never flow through the client — the homepage button just
+ * triggers this action.
+ */
+export async function signInAsDemoAction() {
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithPassword({
+    email: DEMO_EMAIL,
+    password: DEMO_PASSWORD,
+  });
+  if (error) return { error: error.message };
+  revalidatePath('/', 'layout');
+  redirect(DEMO_LANDING_PATH);
 }
