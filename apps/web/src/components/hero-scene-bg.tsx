@@ -7,11 +7,15 @@ interface HeroSceneBgProps {
 }
 
 /**
- * Hero backdrop — theme-split.
- *   Dark  : cinematic action photo (or crowd silhouette fallback) + heavy scrim.
- *   Light : clean perspective Kabaddi mat — no photo, premium editorial feel.
+ * Hero backdrop.
+ *   Mobile (any theme) : clean perspective Kabaddi mat — photo is too busy at
+ *     small viewports (its built-in scoreboard graphic + sponsor banners
+ *     fight the headline).
+ *   Tablet+ (both themes) : cinematic action photo. Scrim is theme-aware —
+ *     heavier white wash in light mode so dark headline copy stays readable,
+ *     lighter dark scrim at night so the photo keeps its cinematic feel.
  *
- * Pass `src` to use a real photo in dark mode. Next.js Image handles
+ * Pass `src` to use a real photo on tablet+. Next.js Image handles
  * AVIF/WebP + responsive sizes automatically. When omitted, falls back to a
  * stylized 3-tier stadium crowd silhouette.
  */
@@ -21,20 +25,13 @@ export function HeroSceneBg({
 }: HeroSceneBgProps) {
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-      {/* MOBILE (any theme) — clean perspective mat. The action photo is too
-          busy on small screens (its built-in scoreboard graphic + sponsor
-          banners fight the headline). Reserve photo for tablet+. */}
+      {/* MOBILE — clean perspective mat (any theme). */}
       <div className="md:hidden">
         <KabaddiMatBg />
       </div>
 
-      {/* TABLET+ LIGHT — perspective mat */}
-      <div className="hidden md:block dark:md:hidden">
-        <KabaddiMatBg />
-      </div>
-
-      {/* TABLET+ DARK — cinematic photo + scrim */}
-      <div className="hidden md:dark:block">
+      {/* TABLET+ — same cinematic photo in light + dark; scrim adapts. */}
+      <div className="hidden md:block">
         {src ? (
           <Image
             src={src}
@@ -47,9 +44,13 @@ export function HeroSceneBg({
         ) : (
           <CrowdSilhouette />
         )}
-        <div className="absolute inset-0 bg-background/35" />
-        <div className="absolute inset-y-0 right-0 hidden w-1/5 bg-gradient-to-l from-background/60 to-transparent lg:block" />
-        <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-background via-background/55 to-transparent" />
+        {/* Base scrim — 70% wash in light so headline contrast stays high,
+            35% wash in dark for full cinematic depth. */}
+        <div className="absolute inset-0 bg-background/70 dark:bg-background/35" />
+        {/* Right-edge fade pulls focus toward the headline column. */}
+        <div className="absolute inset-y-0 right-0 hidden w-1/5 bg-gradient-to-l from-background/75 to-transparent dark:from-background/60 lg:block" />
+        {/* Bottom-edge fade so the next section blends in without a seam. */}
+        <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-background via-background/75 to-transparent dark:via-background/55" />
       </div>
     </div>
   );
