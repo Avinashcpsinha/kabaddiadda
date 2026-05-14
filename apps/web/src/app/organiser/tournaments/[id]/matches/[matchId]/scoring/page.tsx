@@ -6,6 +6,7 @@ import { getSessionUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { BroadcastOverlayHelp } from '../broadcast-overlay-help';
 import { ScoringConsole } from './scoring-console';
+import { ScoringTutorial } from './scoring-tutorial';
 
 export default async function ScoringPage({
   params,
@@ -164,6 +165,13 @@ export default async function ScoringPage({
   const homeSlots = buildSlots(homeId);
   const awaySlots = buildSlots(awayId);
 
+  // Demo visitors get the guided tour auto-started on first arrival. Real
+  // organisers see only a "Show tour" pill they can opt into.
+  const isDemoSession =
+    !!user?.email &&
+    user.email.startsWith('demo-') &&
+    user.email.endsWith('@kabaddiadda.in');
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -217,6 +225,7 @@ export default async function ScoringPage({
         homeSlots={homeSlots}
         awaySlots={awaySlots}
       />
+      <ScoringTutorial autoStart={isDemoSession} />
     </div>
   );
 }

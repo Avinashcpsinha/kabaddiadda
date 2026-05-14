@@ -1239,7 +1239,7 @@ export function ScoringConsole({
   return (
     <div className="flex min-h-[640px] w-full min-w-0 max-w-full flex-col gap-3 overflow-x-hidden">
       {/* HEADER BAR — score, clocks, match controls in a single tight row */}
-      <Card className="shrink-0 overflow-hidden">
+      <Card className="shrink-0 overflow-hidden" data-tour="score-header">
         <CardContent className="grid grid-cols-1 items-center gap-4 p-4 md:grid-cols-[1fr_auto_1fr]">
           <div className="flex min-w-0 items-center gap-2">
             <CompactTeamScore
@@ -1325,7 +1325,7 @@ export function ScoringConsole({
             </div>
 
             {/* Match controls */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1" data-tour="match-controls">
               {status === 'scheduled' && (
                 <Button onClick={startMatch} variant="flame" size="sm">
                   <Play className="h-3 w-3" />
@@ -1393,7 +1393,7 @@ export function ScoringConsole({
         <Card className="flex flex-col overflow-hidden">
           <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-4">
             {/* Currently raiding toggle */}
-            <div className="grid shrink-0 grid-cols-2 gap-2">
+            <div className="grid shrink-0 grid-cols-2 gap-2" data-tour="team-toggle">
               <RaidingTeamButton
                 team={home}
                 active={attackingId === home.id}
@@ -1478,7 +1478,7 @@ export function ScoringConsole({
             )}
 
             {/* Pickers — grow to fill, internal scroll if rosters are long */}
-            <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col" data-tour="player-picker">
               <div className="mb-2 flex shrink-0 items-center justify-between">
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
                   {swapMode
@@ -1714,7 +1714,10 @@ export function ScoringConsole({
                 3 cols on phone (full-width card), 6 cols on tablet (still
                 full-width, more breathing room), 3 cols on desktop where
                 this card is in the 320px right column. */}
-            <div className="grid shrink-0 grid-cols-3 gap-1.5 border-t border-border/50 pt-3 md:grid-cols-6 lg:grid-cols-3">
+            <div
+              className="grid shrink-0 grid-cols-3 gap-1.5 border-t border-border/50 pt-3 md:grid-cols-6 lg:grid-cols-3"
+              data-tour="action-grid"
+            >
               <ActionBtn
                 icon={<Target />}
                 label="Touch"
@@ -2077,7 +2080,10 @@ export function ScoringConsole({
       {/* BOTTOM ROW — Event log spans full width below the
           pickers + actions grid. Caps height with max-h so the log
           doesn't push the action grid off-screen on tall viewports. */}
-      <Card className="flex shrink-0 flex-col overflow-hidden lg:max-h-[260px]">
+      <Card
+        className="flex shrink-0 flex-col overflow-hidden lg:max-h-[260px]"
+        data-tour="event-log"
+      >
           <CardContent className="flex min-h-0 flex-1 flex-col p-4">
             <div className="mb-2 flex shrink-0 items-center justify-between">
               <h3 className="text-xs font-semibold uppercase tracking-wider">Event log</h3>
