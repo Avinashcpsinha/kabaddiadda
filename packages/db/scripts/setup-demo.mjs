@@ -46,6 +46,9 @@ const NAMES_BY_TEAM = {
   MUM: ['Pratik Shinde', 'Yash Patil', 'Rohan Desai', 'Tushar Joshi', 'Sandeep Kale', 'Mahesh Kadam', 'Vinit Naik', 'Sachin Pawar'],
 };
 
+const playerIdFor = (teamIndex, playerIndex) =>
+  `d0000000-0000-0000-0000-1${teamIndex}${String(playerIndex).padStart(10, '0')}`;
+
 async function authAdmin(method, path, body) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -123,8 +126,10 @@ export async function seedDemo() {
         tenant_id = excluded.tenant_id
     `;
 
-    // Wipe demo tenant data — order matters since match_events FK-cascades from matches.
+    // Wipe demo tenant data. Order matters where children reference parents.
     await sql`delete from public.match_events where tenant_id = ${DEMO_TENANT_ID}`;
+    await sql`delete from public.match_player_state where tenant_id = ${DEMO_TENANT_ID}`;
+    await sql`delete from public.match_lineups where tenant_id = ${DEMO_TENANT_ID}`;
     await sql`delete from public.matches where tenant_id = ${DEMO_TENANT_ID}`;
     await sql`delete from public.players where tenant_id = ${DEMO_TENANT_ID}`;
     await sql`delete from public.teams where tenant_id = ${DEMO_TENANT_ID}`;
@@ -152,7 +157,7 @@ export async function seedDemo() {
       const team = TEAMS[ti];
       const names = NAMES_BY_TEAM[team.short_name];
       for (let pi = 0; pi < names.length; pi++) {
-        const id = `d0000000-0000-0000-0000-1${ti}${String(pi).padStart(10, '0')}`;
+        const id = playerIdFor(ti, pi);
         await sql`
           insert into public.players (id, tenant_id, team_id, full_name, jersey_number, role, is_captain)
           values (${id}, ${DEMO_TENANT_ID}, ${team.id}, ${names[pi]}, ${pi + 1}, ${ROLES[pi]}, ${pi === 0})
@@ -174,8 +179,37 @@ export async function seedDemo() {
          ${TEAM_IDS[2]}, ${TEAM_IDS[3]}, ${futureScheduledAt}, 'scheduled', 0, 0, 1, 0, 'League · Round 1')
     `;
 
+    // Lineups + on-mat state for the LIVE match. First 7 players start, 8th
+    // sits on the bench. Without this the scoring console shows "no on-mat
+    // lineup" even though the match status is 'live'.
+    const homePlayerIds = Array.from({ length: 8 }, (_, i) => playerIdFor(0, i));
+    const awayPlayerIds = Array.from({ length: 8 }, (_, i) => playerIdFor(1, i));
+    const lockedAt = new Date().toISOString();
+
+    await sql`
+      insert into public.match_lineups
+        (tenant_id, match_id, team_id, starting_player_ids, bench_player_ids, captain_id, locked_at)
+      values
+        (${DEMO_TENANT_ID}, ${MATCH_LIVE_ID}, ${TEAM_IDS[0]},
+         ${sql.json(homePlayerIds.slice(0, 7))}, ${sql.json(homePlayerIds.slice(7))},
+         ${homePlayerIds[0]}, ${lockedAt}),
+        (${DEMO_TENANT_ID}, ${MATCH_LIVE_ID}, ${TEAM_IDS[1]},
+         ${sql.json(awayPlayerIds.slice(0, 7))}, ${sql.json(awayPlayerIds.slice(7))},
+         ${awayPlayerIds[0]}, ${lockedAt})
+    `;
+
+    // match_player_state — 7 'on_mat' + 1 'bench' per team.
+    for (let i = 0; i < 8; i++) {
+      const state = i < 7 ? 'on_mat' : 'bench';
+      await sql`
+        insert into public.match_player_state (tenant_id, match_id, team_id, player_id, state)
+        values (${DEMO_TENANT_ID}, ${MATCH_LIVE_ID}, ${TEAM_IDS[0]}, ${homePlayerIds[i]}, ${state}),
+               (${DEMO_TENANT_ID}, ${MATCH_LIVE_ID}, ${TEAM_IDS[1]}, ${awayPlayerIds[i]}, ${state})
+      `;
+    }
+
     console.log(`✓ Tenant ready: kabaddiadda-demo`);
-    console.log(`✓ Seeded ${TEAMS.length} teams, ${playerCount} players, 2 matches`);
+    console.log(`✓ Seeded ${TEAMS.length} teams, ${playerCount} players, 2 matches (1 live with lineups)`);
     console.log(`✓ Live match URL: /organiser/tournaments/${DEMO_TOURNAMENT_ID}/matches/${MATCH_LIVE_ID}/scoring`);
 
     return {

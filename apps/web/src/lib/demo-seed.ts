@@ -86,8 +86,17 @@ export async function reseedDemoTenant(): Promise<{
       { onConflict: 'id' },
     );
 
-  // Wipe demo tenant content. Order matters where there's no CASCADE FK.
-  for (const t of ['match_events', 'matches', 'players', 'teams', 'tournaments']) {
+  // Wipe demo tenant content. Order matters where children block deletion of
+  // parents (e.g. match_player_state has FKs into matches AND players).
+  for (const t of [
+    'match_events',
+    'match_player_state',
+    'match_lineups',
+    'matches',
+    'players',
+    'teams',
+    'tournaments',
+  ]) {
     const { error } = await supabase.from(t).delete().eq('tenant_id', DEMO_TENANT_ID);
     if (error) throw error;
   }
@@ -163,6 +172,53 @@ export async function reseedDemoTenant(): Promise<{
       round: 'League · Round 1',
     },
   ]);
+
+  // --- Lineups + on-mat state for the LIVE match -----------------------
+  // Without these, the scoring console shows "No on-mat lineup. Set lineups
+  // before starting the match." even though the match has status='live'.
+  // First 7 players per team start on the mat, 8th sits on the bench.
+  const homePlayerIds = players.filter((p) => p.team_id === DEMO_TEAM_IDS[0]).map((p) => p.id);
+  const awayPlayerIds = players.filter((p) => p.team_id === DEMO_TEAM_IDS[1]).map((p) => p.id);
+  const lockedAt = new Date().toISOString();
+
+  await supabase.from('match_lineups').insert([
+    {
+      tenant_id: DEMO_TENANT_ID,
+      match_id: DEMO_MATCH_LIVE_ID,
+      team_id: DEMO_TEAM_IDS[0],
+      starting_player_ids: homePlayerIds.slice(0, 7),
+      bench_player_ids: homePlayerIds.slice(7),
+      captain_id: homePlayerIds[0],
+      locked_at: lockedAt,
+    },
+    {
+      tenant_id: DEMO_TENANT_ID,
+      match_id: DEMO_MATCH_LIVE_ID,
+      team_id: DEMO_TEAM_IDS[1],
+      starting_player_ids: awayPlayerIds.slice(0, 7),
+      bench_player_ids: awayPlayerIds.slice(7),
+      captain_id: awayPlayerIds[0],
+      locked_at: lockedAt,
+    },
+  ]);
+
+  const playerStateRows = [
+    ...homePlayerIds.map((pid, i) => ({
+      tenant_id: DEMO_TENANT_ID,
+      match_id: DEMO_MATCH_LIVE_ID,
+      team_id: DEMO_TEAM_IDS[0],
+      player_id: pid,
+      state: i < 7 ? 'on_mat' : 'bench',
+    })),
+    ...awayPlayerIds.map((pid, i) => ({
+      tenant_id: DEMO_TENANT_ID,
+      match_id: DEMO_MATCH_LIVE_ID,
+      team_id: DEMO_TEAM_IDS[1],
+      player_id: pid,
+      state: i < 7 ? 'on_mat' : 'bench',
+    })),
+  ];
+  await supabase.from('match_player_state').insert(playerStateRows);
 
   return {
     teams: DEMO_TEAMS.length,
