@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono, Anton, Fraunces } from 'next/font/google';
 import { Analytics } from '@vercel/analytics/next';
 import { ThemeProvider } from '@/components/theme-provider';
 import { PostHogProvider } from '@/components/posthog-provider';
+import { FeedbackWidget } from '@/components/feedback/feedback-widget';
 import { Toaster } from 'sonner';
 import './globals.css';
 
@@ -53,6 +54,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           disableTransitionOnChange
         >
           <PostHogProvider>{children}</PostHogProvider>
+          <FeedbackWidget />
           <Toaster richColors closeButton position="top-right" />
         </ThemeProvider>
         <Analytics />
