@@ -18,6 +18,9 @@ const NAV: NavItem[] = [
 export default async function UserLayout({ children }: { children: React.ReactNode }) {
   const user = await getSessionUser();
   if (!user) redirect('/login?next=/feed');
+  // Fan zone is fan-only — bounce organisers + superadmins to their own console.
+  if (user.role === 'organiser') redirect('/organiser');
+  if (user.role === 'superadmin') redirect('/admin');
 
   return (
     <div className="flex min-h-screen bg-secondary/10">
