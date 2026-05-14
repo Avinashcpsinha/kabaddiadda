@@ -26,7 +26,6 @@ export function SignupForm() {
     startTransition(async () => {
       const res = await signUpAction(fd);
       if (res?.error) toast.error(res.error);
-      else if (res?.success) toast.success(res.success);
     });
   }
 

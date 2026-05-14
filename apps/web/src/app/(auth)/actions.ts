@@ -37,7 +37,7 @@ export async function signUpAction(formData: FormData) {
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
@@ -50,7 +50,17 @@ export async function signUpAction(formData: FormData) {
   });
   if (error) return { error: error.message };
 
-  return { success: 'Check your email to confirm your account.' };
+  // With "Confirm email" disabled in Supabase, signUp returns a live session —
+  // sign the user straight in and redirect to their dashboard.
+  if (data.session) {
+    revalidatePath('/', 'layout');
+    const session = await getSessionUser();
+    redirect(session ? dashboardPathForRole(session.role) : '/feed');
+  }
+
+  // If we reach here, Supabase still has email confirmation switched on at
+  // the project level — flip it off in Auth → Providers → Email.
+  return { error: 'Account created but could not sign you in. Please log in.' };
 }
 
 export async function signOutAction() {
