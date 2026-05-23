@@ -13,12 +13,15 @@ export interface BarRow {
 export function HorizontalBarChart({
   data,
   height = 320,
-  valueFormatter,
+  /** Suffix appended to the tooltip value (e.g. " pts"). Use a string
+   *  instead of a formatter function — server components can't hand a
+   *  function across the RSC boundary to this client component. */
+  valueSuffix,
   accentColor = 'hsl(var(--primary))',
 }: {
   data: BarRow[];
   height?: number;
-  valueFormatter?: (n: number) => string;
+  valueSuffix?: string;
   accentColor?: string;
 }) {
   if (data.length === 0) {
@@ -52,7 +55,7 @@ export function HorizontalBarChart({
           formatter={(value) => {
             if (value == null) return ['', ''];
             const num = typeof value === 'number' ? value : Number(value);
-            return [valueFormatter ? valueFormatter(num) : num, 'Points'];
+            return [valueSuffix ? `${num} ${valueSuffix.trim()}` : num, 'Points'];
           }}
         />
         <Bar dataKey="value" radius={[0, 4, 4, 0]}>

@@ -258,7 +258,7 @@ export default async function TournamentReportPage({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <HorizontalBarChart data={scorerRows} valueFormatter={(n) => `${n} pts`} />
+            <HorizontalBarChart data={scorerRows} valueSuffix="pts" />
           </CardContent>
         </Card>
 
@@ -272,7 +272,7 @@ export default async function TournamentReportPage({
           <CardContent>
             <HorizontalBarChart
               data={defenderRows}
-              valueFormatter={(n) => `${n} pts`}
+              valueSuffix="pts"
               accentColor="#475569"
             />
           </CardContent>
