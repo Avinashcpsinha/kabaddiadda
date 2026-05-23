@@ -1091,6 +1091,9 @@ export function ScoringConsole({
   // counts when defending side has ≤3 on mat) and to validate other actions.
   const defendersOnMatCount = defendingSlots.filter((s) => s.state === 'on_mat').length;
   const superTackleEligible = defendersOnMatCount > 0 && defendersOnMatCount <= KABADDI.SUPER_TACKLE_DEFENDER_THRESHOLD;
+  // Bonus is only valid when the defending side has ≥6 on mat (IKF rule).
+  // Mirrors the server-side guard in recordMatchEventAction.
+  const bonusEligible = defendersOnMatCount >= KABADDI.BONUS_MIN_DEFENDERS;
   // Super Raid requires ≥3 touches (3+ defenders selected) — anything less
   // can't reach 3 points without a bonus, which the T+B button covers.
   const superRaidEligible = touchedCount >= 3;
@@ -1797,12 +1800,14 @@ export function ScoringConsole({
                     false, // raider can keep raiding after a bonus
                   )
                 }
-                disabled={!isLive || pending || !raiderId}
+                disabled={!isLive || pending || !raiderId || !bonusEligible}
                 tone="attack"
                 title={
                   !raiderId
                     ? 'Pick the raider first — Bonus is awarded when the raider crosses the bonus line and returns'
-                    : 'Bonus — attack +1, raider can continue raiding. Use Complete Raid when the raid ends.'
+                    : !bonusEligible
+                      ? `Bonus requires ≥${KABADDI.BONUS_MIN_DEFENDERS} defenders on mat (currently ${defendersOnMatCount})`
+                      : 'Bonus — attack +1, raider can continue raiding. Use Complete Raid when the raid ends.'
                 }
                 staged={pendingActions.some((p) => p.label === 'Bonus')}
               />
