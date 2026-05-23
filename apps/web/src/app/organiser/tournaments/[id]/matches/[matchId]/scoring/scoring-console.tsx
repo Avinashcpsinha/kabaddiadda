@@ -23,6 +23,7 @@ import {
   Target,
   Timer,
   Trash2,
+  Wrench,
   Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -49,6 +50,7 @@ import {
   expireCardAction,
   persistTimerStateAction,
   recordCardAction,
+  recordManualEventAction,
   recordMatchEventAction,
   recordDefenderOutOfBoundsAction,
   recordRaiderOutOfBoundsAction,
@@ -375,12 +377,13 @@ export function ScoringConsole({
   const [swapMode, setSwapMode] = React.useState(false);
   const [swapFirstId, setSwapFirstId] = React.useState<string | null>(null);
   const [pending, startTransition] = React.useTransition();
-  // Modal state for the secondary actions (cards, sub, review).
+  // Modal state for the secondary actions (cards, sub, review, manual).
   const [openModal, setOpenModal] = React.useState<
     | null
     | { kind: 'card'; color: 'green' | 'yellow' | 'red'; teamId: string }
     | { kind: 'sub'; teamId: string }
     | { kind: 'review'; teamId: string }
+    | { kind: 'manual'; teamId: string }
     | { kind: 'help' }
   >(null);
 
@@ -997,6 +1000,34 @@ export function ScoringConsole({
             ? `Review upheld — ${n} event${n === 1 ? '' : 's'} reverted`
             : 'Review overturned — call stands',
         );
+        setOpenModal(null);
+      }
+      return res;
+    });
+  }
+
+  function handleManualEvent(input: {
+    teamId: string;
+    type: EventType;
+    pointsAttacker: number;
+    pointsDefender: number;
+    raiderId: string | null;
+    defenderIds: string[];
+  }) {
+    withSubmit(async () => {
+      const res = await recordManualEventAction({
+        matchId,
+        attackingTeamId: input.teamId,
+        type: input.type,
+        pointsAttacker: input.pointsAttacker,
+        pointsDefender: input.pointsDefender,
+        raiderId: input.raiderId,
+        defenderIds: input.defenderIds,
+        half,
+        clockSeconds: clock,
+      });
+      if (!res?.error) {
+        toast.success(`Manual event recorded — ${EVENT_LABEL[input.type] ?? input.type}`);
         setOpenModal(null);
       }
       return res;
@@ -2048,6 +2079,14 @@ export function ScoringConsole({
                 tone="neutral"
                 title={`Reviews used: ${attackingId === home.id ? initial.homeReviewsUsed : initial.awayReviewsUsed}`}
               />
+              <SmallActionBtn
+                icon={<Wrench className="h-3 w-3" />}
+                label="Manual"
+                onClick={() => setOpenModal({ kind: 'manual', teamId: attackingId })}
+                disabled={pending}
+                tone="neutral"
+                title="Manual event — pick any event type, team and players, then override the points. Score auto-adjusts."
+              />
             </div>
 
             {/* Action reference — opens a help modal documenting every button */}
@@ -2183,6 +2222,20 @@ export function ScoringConsole({
             away={away}
             onUpheld={(eventIds) => handleReview('upheld', openModal.teamId, eventIds)}
             onOverturned={() => handleReview('overturned', openModal.teamId)}
+          />
+        </Modal>
+      )}
+
+      {openModal?.kind === 'manual' && (
+        <Modal onClose={() => setOpenModal(null)} title="Manual event">
+          <ManualEventControls
+            initialTeamId={openModal.teamId}
+            home={home}
+            away={away}
+            homeSlots={homeSlots}
+            awaySlots={awaySlots}
+            onCancel={() => setOpenModal(null)}
+            onConfirm={handleManualEvent}
           />
         </Modal>
       )}
@@ -2736,6 +2789,378 @@ function ReviewControls({
       >
         Revert {picked.size > 0 ? `${picked.size} event${picked.size === 1 ? '' : 's'}` : 'selected'}
       </Button>
+    </div>
+  );
+}
+
+// Per-event-type config for the manual modal: which player pickers to
+// show, validation requirements, and how to seed default point deltas
+// when the event type changes. Operator can still edit the points after.
+type ManualEventCfg = {
+  label: string;
+  group: 'raid' | 'tackle' | 'special';
+  needsRaider: boolean;
+  needsDefenders: boolean; // requires ≥1 to record
+  /** Computes default attacker/defender point deltas given the picked
+   *  defender count. Returns a tuple [pointsAttacker, pointsDefender]. */
+  defaultPoints: (defenderCount: number) => [number, number];
+};
+
+const MANUAL_EVENT_TYPES: Array<{ type: EventType; cfg: ManualEventCfg }> = [
+  {
+    type: 'raid_point',
+    cfg: {
+      label: 'Raid',
+      group: 'raid',
+      needsRaider: true,
+      needsDefenders: true,
+      defaultPoints: (n) => [Math.max(n, 1), 0],
+    },
+  },
+  {
+    type: 'super_raid',
+    cfg: {
+      label: 'Super raid',
+      group: 'raid',
+      needsRaider: true,
+      needsDefenders: true,
+      defaultPoints: (n) => [Math.max(n, 3), 0],
+    },
+  },
+  {
+    type: 'bonus_point',
+    cfg: {
+      label: 'Bonus',
+      group: 'raid',
+      needsRaider: true,
+      needsDefenders: false,
+      defaultPoints: () => [1, 0],
+    },
+  },
+  {
+    type: 'do_or_die_raid',
+    cfg: {
+      label: 'Do-or-die',
+      group: 'raid',
+      needsRaider: true,
+      needsDefenders: false,
+      defaultPoints: (n) => (n > 0 ? [n, 0] : [0, 1]),
+    },
+  },
+  {
+    type: 'empty_raid',
+    cfg: {
+      label: 'Empty raid',
+      group: 'raid',
+      needsRaider: true,
+      needsDefenders: false,
+      defaultPoints: () => [0, 0],
+    },
+  },
+  {
+    type: 'tackle_point',
+    cfg: {
+      label: 'Tackle',
+      group: 'tackle',
+      needsRaider: true,
+      needsDefenders: true,
+      defaultPoints: () => [0, 1],
+    },
+  },
+  {
+    type: 'super_tackle',
+    cfg: {
+      label: 'Super tackle',
+      group: 'tackle',
+      needsRaider: true,
+      needsDefenders: true,
+      defaultPoints: () => [0, 2],
+    },
+  },
+  {
+    type: 'all_out',
+    cfg: {
+      label: 'All out',
+      group: 'special',
+      needsRaider: false,
+      needsDefenders: false,
+      defaultPoints: () => [2, 0],
+    },
+  },
+  {
+    type: 'technical_point',
+    cfg: {
+      label: 'Technical',
+      group: 'special',
+      needsRaider: false,
+      needsDefenders: false,
+      defaultPoints: () => [1, 0],
+    },
+  },
+];
+
+const MANUAL_CFG_BY_TYPE: Record<string, ManualEventCfg> = Object.fromEntries(
+  MANUAL_EVENT_TYPES.map(({ type, cfg }) => [type, cfg]),
+);
+
+function ManualEventControls({
+  initialTeamId,
+  home,
+  away,
+  homeSlots,
+  awaySlots,
+  onCancel,
+  onConfirm,
+}: {
+  initialTeamId: string;
+  home: TeamLite;
+  away: TeamLite;
+  homeSlots: PlayerSlot[];
+  awaySlots: PlayerSlot[];
+  onCancel: () => void;
+  onConfirm: (input: {
+    teamId: string;
+    type: EventType;
+    pointsAttacker: number;
+    pointsDefender: number;
+    raiderId: string | null;
+    defenderIds: string[];
+  }) => void;
+}) {
+  const [teamId, setTeamId] = React.useState<string>(initialTeamId);
+  const [type, setType] = React.useState<EventType>('raid_point');
+  const [raiderId, setRaiderId] = React.useState<string | null>(null);
+  const [defenderIds, setDefenderIds] = React.useState<string[]>([]);
+  const [pointsAtt, setPointsAtt] = React.useState<number>(1);
+  const [pointsDef, setPointsDef] = React.useState<number>(0);
+
+  const cfg = MANUAL_CFG_BY_TYPE[type]!;
+  const attackingSlots = teamId === home.id ? homeSlots : awaySlots;
+  const defendingSlots = teamId === home.id ? awaySlots : homeSlots;
+  const onMatRaiders = attackingSlots.filter((s) => s.state === 'on_mat');
+  const onMatDefenders = defendingSlots.filter((s) => s.state === 'on_mat');
+
+  // Seed default points whenever the event type or defender count changes.
+  // Operator can still tweak the inputs after — the next type change re-seeds.
+  React.useEffect(() => {
+    const [a, d] = cfg.defaultPoints(defenderIds.length);
+    setPointsAtt(a);
+    setPointsDef(d);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type, defenderIds.length]);
+
+  // If the team flips, clear player selections — they're scoped to a side.
+  React.useEffect(() => {
+    setRaiderId(null);
+    setDefenderIds([]);
+  }, [teamId]);
+
+  function toggleDefender(id: string) {
+    setDefenderIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  const validationError = (() => {
+    if (cfg.needsRaider && !raiderId) return 'Pick a raider for this event type.';
+    if (cfg.needsDefenders && defenderIds.length === 0)
+      return 'Pick at least one defender for this event type.';
+    return null;
+  })();
+
+  function submit() {
+    if (validationError) return;
+    onConfirm({
+      teamId,
+      type,
+      pointsAttacker: pointsAtt,
+      pointsDefender: pointsDef,
+      raiderId: cfg.needsRaider ? raiderId : null,
+      defenderIds: cfg.needsDefenders || defenderIds.length > 0 ? defenderIds : [],
+    });
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Event type picker — grouped */}
+      <div>
+        <Label>Event type</Label>
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          {MANUAL_EVENT_TYPES.map(({ type: t, cfg: c }) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setType(t)}
+              className={cn(
+                'rounded-md border px-2 py-1 text-xs transition-colors',
+                t === type
+                  ? 'border-primary bg-primary/15 font-medium text-primary'
+                  : 'border-border bg-background hover:bg-accent/30',
+              )}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Team toggle */}
+      <div>
+        <Label>Attacking team</Label>
+        <div className="mt-1 grid grid-cols-2 gap-1.5">
+          {[home, away].map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTeamId(t.id)}
+              className={cn(
+                'rounded-md border px-2 py-1.5 text-xs transition-colors',
+                t.id === teamId
+                  ? 'border-primary bg-primary/15 font-medium text-primary'
+                  : 'border-border bg-background hover:bg-accent/30',
+              )}
+            >
+              {t.short_name || initials(t.name)} · {t.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Raider — required when needsRaider */}
+      {cfg.needsRaider && (
+        <div>
+          <Label>
+            Raider <span className="text-muted-foreground">(on mat)</span>
+          </Label>
+          {onMatRaiders.length === 0 ? (
+            <p className="mt-1 text-xs text-muted-foreground">No on-mat players for this team.</p>
+          ) : (
+            <select
+              value={raiderId ?? ''}
+              onChange={(e) => setRaiderId(e.target.value || null)}
+              className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+            >
+              <option value="">— Select raider —</option>
+              {onMatRaiders.map((s) => (
+                <option key={s.playerId} value={s.playerId}>
+                  {s.jerseyNumber != null ? `#${s.jerseyNumber} ` : ''}
+                  {s.fullName}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+
+      {/* Defenders — required when needsDefenders, optional otherwise */}
+      {(cfg.needsDefenders || cfg.needsRaider) && (
+        <div>
+          <Label>
+            Defenders{' '}
+            <span className="text-muted-foreground">
+              {cfg.needsDefenders ? '(at least 1)' : '(optional)'}
+            </span>
+          </Label>
+          {onMatDefenders.length === 0 ? (
+            <p className="mt-1 text-xs text-muted-foreground">No on-mat defenders for the other side.</p>
+          ) : (
+            <ul className="mt-1 grid max-h-[140px] grid-cols-2 gap-1 overflow-y-auto rounded-md border p-1">
+              {onMatDefenders.map((s) => {
+                const checked = defenderIds.includes(s.playerId);
+                return (
+                  <li key={s.playerId}>
+                    <label className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-accent/30">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleDefender(s.playerId)}
+                      />
+                      <span className="truncate">
+                        {s.jerseyNumber != null ? `#${s.jerseyNumber} ` : ''}
+                        {s.fullName}
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* Point deltas */}
+      <div className="grid grid-cols-2 gap-3">
+        <NumberStepper
+          label="Attacker points"
+          value={pointsAtt}
+          onChange={setPointsAtt}
+        />
+        <NumberStepper
+          label="Defender points"
+          value={pointsDef}
+          onChange={setPointsDef}
+        />
+      </div>
+
+      {validationError && (
+        <p className="text-xs text-amber-500">{validationError}</p>
+      )}
+
+      <div className="flex items-center justify-end gap-2 pt-1">
+        <Button onClick={onCancel} variant="outline">
+          Cancel
+        </Button>
+        <Button onClick={submit} variant="flame" disabled={!!validationError}>
+          Record event
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function Label({ children }: { children: React.ReactNode }) {
+  return <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{children}</span>;
+}
+
+function NumberStepper({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (n: number) => void;
+}) {
+  return (
+    <div>
+      <Label>{label}</Label>
+      <div className="mt-1 flex items-stretch overflow-hidden rounded-md border border-border">
+        <button
+          type="button"
+          onClick={() => onChange(value - 1)}
+          className="px-2 text-muted-foreground hover:bg-accent/30"
+          aria-label="Decrease"
+        >
+          <Minus className="h-3 w-3" />
+        </button>
+        <input
+          type="number"
+          value={value}
+          onChange={(e) => {
+            const n = parseInt(e.target.value, 10);
+            onChange(Number.isFinite(n) ? n : 0);
+          }}
+          className="w-full bg-background px-2 py-1 text-center text-sm font-mono"
+        />
+        <button
+          type="button"
+          onClick={() => onChange(value + 1)}
+          className="px-2 text-muted-foreground hover:bg-accent/30"
+          aria-label="Increase"
+        >
+          <Plus className="h-3 w-3" />
+        </button>
+      </div>
     </div>
   );
 }

@@ -909,6 +909,50 @@ export async function callReviewAction(input: {
 }
 
 // ============================================================
+// Manual event — operator escape hatch. Records any scoring event with
+// operator-chosen points (no auto-promotion, no preconditions). The score
+// trigger handles team-score updates; the player-state trigger handles
+// state updates the same as a normal insert. Stored with details.manual
+// so it's identifiable in the timeline.
+// ============================================================
+export async function recordManualEventAction(input: {
+  matchId: string;
+  attackingTeamId: string;
+  type: EventType;
+  pointsAttacker: number;
+  pointsDefender: number;
+  half: number;
+  clockSeconds: number;
+  raiderId?: string | null;
+  defenderIds?: string[];
+}) {
+  const user = await getSessionUser();
+  if (!user?.tenantId) return { error: 'Not authorised' };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from('match_events').insert({
+    tenant_id: user.tenantId,
+    match_id: input.matchId,
+    type: input.type,
+    attacking_team_id: input.attackingTeamId,
+    points_attacker: input.pointsAttacker,
+    points_defender: input.pointsDefender,
+    half: input.half,
+    clock_seconds: input.clockSeconds,
+    raider_id: input.raiderId ?? null,
+    defender_ids: input.defenderIds && input.defenderIds.length > 0 ? input.defenderIds : null,
+    is_super_raid: input.type === 'super_raid',
+    is_super_tackle: input.type === 'super_tackle',
+    is_all_out: input.type === 'all_out',
+    details: { manual: true },
+    created_by: user.id,
+  });
+
+  if (error) return { error: error.message };
+  return { ok: true };
+}
+
+// ============================================================
 // Manual score adjustment — referee correction (e.g., scoring system glitch).
 // Logged as a technical_point with a "manual_adjust" reason and a delta of ±1.
 // ============================================================
