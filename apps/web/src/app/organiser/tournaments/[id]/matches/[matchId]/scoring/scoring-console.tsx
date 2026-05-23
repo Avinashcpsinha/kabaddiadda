@@ -980,7 +980,7 @@ export function ScoringConsole({
     });
   }
 
-  function handleReview(outcome: 'upheld' | 'overturned', teamId: string) {
+  function handleReview(outcome: 'upheld' | 'overturned', teamId: string, eventIds?: string[]) {
     withSubmit(async () => {
       const res = await callReviewAction({
         matchId,
@@ -988,9 +988,15 @@ export function ScoringConsole({
         outcome,
         half,
         clockSeconds: clock,
+        eventIds,
       });
       if (!res?.error) {
-        toast.success(outcome === 'upheld' ? 'Review upheld — last event undone' : 'Review overturned — call stands');
+        const n = eventIds?.length ?? 0;
+        toast.success(
+          outcome === 'upheld'
+            ? `Review upheld — ${n} event${n === 1 ? '' : 's'} reverted`
+            : 'Review overturned — call stands',
+        );
         setOpenModal(null);
       }
       return res;
@@ -2172,7 +2178,10 @@ export function ScoringConsole({
           <ReviewControls
             teamName={openModal.teamId === home.id ? home.name : away.name}
             reviewsUsed={openModal.teamId === home.id ? initial.homeReviewsUsed : initial.awayReviewsUsed}
-            onUpheld={() => handleReview('upheld', openModal.teamId)}
+            recentEvents={recentEvents}
+            home={home}
+            away={away}
+            onUpheld={(eventIds) => handleReview('upheld', openModal.teamId, eventIds)}
             onOverturned={() => handleReview('overturned', openModal.teamId)}
           />
         </Modal>
@@ -2584,35 +2593,149 @@ function SubPicker({
   );
 }
 
+// Events that don't carry a score/state change can't be the subject of a
+// review revert (cards, subs, time-outs, prior review markers, etc.).
+const NON_REVERTABLE_EVENT_TYPES = new Set([
+  'green_card',
+  'yellow_card',
+  'red_card',
+  'card_expired',
+  'review_upheld',
+  'review_overturned',
+  'substitution',
+  'time_out',
+  'lineup_set',
+  'match_end',
+]);
+
 function ReviewControls({
   teamName,
   reviewsUsed,
+  recentEvents,
+  home,
+  away,
   onUpheld,
   onOverturned,
 }: {
   teamName: string;
   reviewsUsed: number;
-  onUpheld: () => void;
+  recentEvents: RecentEvent[];
+  home: TeamLite;
+  away: TeamLite;
+  onUpheld: (eventIds: string[]) => void;
   onOverturned: () => void;
 }) {
+  const [stage, setStage] = React.useState<'choice' | 'pick'>('choice');
+  const [picked, setPicked] = React.useState<Set<string>>(new Set());
+
+  const revertable = React.useMemo(
+    () => recentEvents.filter((e) => !NON_REVERTABLE_EVENT_TYPES.has(e.type)),
+    [recentEvents],
+  );
+
+  if (stage === 'choice') {
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Captain of <span className="font-medium text-foreground">{teamName}</span> has called a review.
+          Reviews used so far: <span className="font-mono">{reviewsUsed}</span>
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <Button onClick={() => setStage('pick')} variant="flame">
+            Upheld — pick events to revert
+          </Button>
+          <Button onClick={onOverturned} variant="outline">
+            Overturned — call stands
+          </Button>
+        </div>
+        <p className="text-[10px] text-muted-foreground">
+          Upheld: pick the event(s) to remove; player state is replayed once. Overturned: nothing
+          changes; the review counter still increments.
+        </p>
+      </div>
+    );
+  }
+
+  function toggle(id: string) {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">
-        Captain of <span className="font-medium text-foreground">{teamName}</span> has called a review.
-        Reviews used so far: <span className="font-mono">{reviewsUsed}</span>
-      </p>
-      <div className="grid grid-cols-2 gap-2">
-        <Button onClick={onUpheld} variant="flame">
-          Upheld — undo last event
-        </Button>
-        <Button onClick={onOverturned} variant="outline">
-          Overturned — call stands
-        </Button>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          Tick the event(s) to revert. Player state replays once after all selections.
+        </p>
+        <button
+          type="button"
+          className="shrink-0 text-xs text-muted-foreground underline hover:text-foreground"
+          onClick={() => {
+            setPicked(new Set());
+            setStage('choice');
+          }}
+        >
+          ← Back
+        </button>
       </div>
-      <p className="text-[10px] text-muted-foreground">
-        Upheld: the most recent scoring event for <strong>{teamName}</strong> is removed and player
-        state is replayed. Overturned: nothing changes; the review counter still increments.
-      </p>
+      {revertable.length === 0 ? (
+        <p className="py-4 text-center text-sm text-muted-foreground">
+          No revertable events in the log yet.
+        </p>
+      ) : (
+        <ul className="max-h-[260px] overflow-y-auto rounded-md border">
+          {revertable.map((e) => {
+            const homeAttacking = e.attacking_team_id === home.id;
+            const team = homeAttacking ? home : away;
+            const checked = picked.has(e.id);
+            return (
+              <li key={e.id} className="border-b last:border-b-0">
+                <label className="flex cursor-pointer items-start gap-2 px-2 py-1.5 text-xs hover:bg-accent/30">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggle(e.id)}
+                    className="mt-0.5"
+                  />
+                  <span className="w-12 shrink-0 font-mono text-muted-foreground">
+                    Q{e.half}{' '}
+                    {Math.floor(e.clock_seconds / 60)
+                      .toString()
+                      .padStart(2, '0')}
+                    :{(e.clock_seconds % 60).toString().padStart(2, '0')}
+                  </span>
+                  <Badge variant="outline" className="shrink-0 text-[10px]">
+                    {team.short_name || initials(team.name)}
+                  </Badge>
+                  <span className="flex-1">
+                    {describeEvent(e, team.short_name || team.name)}
+                  </span>
+                  <span className="shrink-0 font-mono">
+                    {e.points_attacker > 0 && (
+                      <span className="text-emerald-500">+{e.points_attacker}</span>
+                    )}
+                    {e.points_defender > 0 && (
+                      <span className="text-sky-500">+{e.points_defender}</span>
+                    )}
+                  </span>
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <Button
+        onClick={() => onUpheld(Array.from(picked))}
+        variant="flame"
+        disabled={picked.size === 0}
+        className="w-full"
+      >
+        Revert {picked.size > 0 ? `${picked.size} event${picked.size === 1 ? '' : 's'}` : 'selected'}
+      </Button>
     </div>
   );
 }

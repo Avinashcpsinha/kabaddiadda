@@ -846,9 +846,11 @@ export async function recordTouchPlusDefenderSelfOutAction(input: {
 }
 
 // ============================================================
-// Review — operator reverses the most recent event for a team if the
-// review was upheld. The undo deletes the event; recompute is run via
-// the SQL function so player_state stays consistent.
+// Review — operator records the outcome of a captain's review. When
+// upheld, the caller passes the specific event ids the operator picked
+// in the picker UI; those events are deleted in one batch and
+// player_state is replayed once. Overturned: nothing is deleted, the
+// review counter still increments.
 // ============================================================
 export async function callReviewAction(input: {
   matchId: string;
@@ -856,13 +858,14 @@ export async function callReviewAction(input: {
   outcome: 'upheld' | 'overturned';
   half: number;
   clockSeconds: number;
+  eventIds?: string[]; // Required for upheld; events the operator chose to revert.
 }) {
   const user = await getSessionUser();
   if (!user?.tenantId) return { error: 'Not authorised' };
 
   const supabase = await createClient();
+  const revertedCount = input.outcome === 'upheld' ? (input.eventIds?.length ?? 0) : 0;
 
-  // Log the review outcome event for the timeline.
   await supabase.from('match_events').insert({
     tenant_id: user.tenantId,
     match_id: input.matchId,
@@ -873,6 +876,7 @@ export async function callReviewAction(input: {
     half: input.half,
     clock_seconds: input.clockSeconds,
     created_by: user.id,
+    details: revertedCount > 0 ? { reverted_count: revertedCount } : undefined,
   });
 
   // Track review counts on the match row.
@@ -890,23 +894,15 @@ export async function callReviewAction(input: {
     await supabase.from('matches').update(patch).eq('id', input.matchId);
   }
 
-  if (input.outcome === 'upheld') {
-    // Find and delete the most recent scoring event for this team.
-    const { data: lastEvent } = await supabase
+  if (input.outcome === 'upheld' && input.eventIds && input.eventIds.length > 0) {
+    // Match-scoped delete prevents a stale id from another match from slipping through.
+    await supabase
       .from('match_events')
-      .select('id')
-      .eq('match_id', input.matchId)
-      .eq('attacking_team_id', input.teamId)
-      .not('type', 'in', '(green_card,yellow_card,red_card,card_expired,review_upheld,review_overturned,substitution,time_out,lineup_set,match_end)')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (lastEvent) {
-      await supabase.from('match_events').delete().eq('id', lastEvent.id);
-      // Replay state from scratch so player_state matches the now-shorter event log.
-      await supabase.rpc('recompute_match_player_state', { p_match_id: input.matchId });
-    }
+      .delete()
+      .in('id', input.eventIds)
+      .eq('match_id', input.matchId);
+    // Replay state from scratch so player_state matches the now-shorter event log.
+    await supabase.rpc('recompute_match_player_state', { p_match_id: input.matchId });
   }
 
   return { ok: true };
