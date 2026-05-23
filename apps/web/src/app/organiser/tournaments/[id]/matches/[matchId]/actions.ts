@@ -1000,10 +1000,23 @@ export async function adjustScoreAction(input: {
  * and the LIVE one must be `state='on_mat'`. Suspended / red-carded
  * players cannot be swap targets — they're locked out by the rules.
  */
+/**
+ * Swap two players' states (and revival-queue position) on the same team.
+ *
+ * Originally constrained to OUT ↔ ON_MAT for fixing tag-the-wrong-defender
+ * mistakes. Generalised so the operator can also rotate ON_MAT ↔ BENCH
+ * (informal substitution that doesn't burn a substitution event),
+ * reorder OUT ↔ OUT (revival queue), or any other same-team swap.
+ *
+ * Both states + out_seq exchange atomically (two updates; the state
+ * column drives every gate that matters).
+ */
 export async function swapPlayerStatesAction(input: {
   matchId: string;
   tournamentId: string;
+  /** First player tapped. */
   outPlayerId: string;
+  /** Second player tapped (must be on the same team). */
   livePlayerId: string;
 }) {
   const user = await getSessionUser();
@@ -1020,26 +1033,24 @@ export async function swapPlayerStatesAction(input: {
   if (fetchErr) return { error: fetchErr.message };
   if ((rows ?? []).length !== 2) return { error: 'Players not found in this match' };
 
-  const out = rows.find((r) => r.player_id === input.outPlayerId);
-  const live = rows.find((r) => r.player_id === input.livePlayerId);
-  if (!out || !live) return { error: 'Players not found' };
-  if (out.state !== 'out') return { error: 'First selection must be an OUT player' };
-  if (live.state !== 'on_mat') return { error: 'Second selection must be an ON-MAT player' };
-  if (out.team_id !== live.team_id) return { error: 'Players must be on the same team' };
+  const a = rows.find((r) => r.player_id === input.outPlayerId);
+  const b = rows.find((r) => r.player_id === input.livePlayerId);
+  if (!a || !b) return { error: 'Players not found' };
+  if (a.team_id !== b.team_id) return { error: 'Players must be on the same team' };
+  if (a.state === b.state && a.out_seq === b.out_seq) {
+    return { error: 'Both players already share the same state — nothing to swap' };
+  }
 
-  // Two updates, not strictly atomic. The state column drives every gate
-  // that matters, so the brief window between writes only risks a concurrent
-  // revive event landing — acceptable for a rarely-used manual override.
   const { error: e1 } = await supabase
     .from('match_player_state')
-    .update({ state: 'on_mat', out_seq: null })
+    .update({ state: b.state, out_seq: b.out_seq })
     .eq('match_id', input.matchId)
     .eq('player_id', input.outPlayerId);
   if (e1) return { error: e1.message };
 
   const { error: e2 } = await supabase
     .from('match_player_state')
-    .update({ state: 'out', out_seq: out.out_seq })
+    .update({ state: a.state, out_seq: a.out_seq })
     .eq('match_id', input.matchId)
     .eq('player_id', input.livePlayerId);
   if (e2) return { error: e2.message };

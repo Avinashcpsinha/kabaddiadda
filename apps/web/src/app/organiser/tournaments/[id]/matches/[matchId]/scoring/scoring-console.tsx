@@ -749,9 +749,10 @@ export function ScoringConsole({
     );
   }
 
-  // Swap flow: first tap is the OUT (died) player, second tap is the
-  // ON-MAT (live) player. Their states exchange — the dead one revives,
-  // the live one goes out. Used to fix tag-the-wrong-defender mistakes.
+  // Swap flow: tap any two players on the SAME team and their states +
+  // revival-queue position exchange. Works for OUT ↔ ON-MAT (fix wrong
+  // defender tag), ON-MAT ↔ BENCH (informal rotation), OUT ↔ BENCH, or
+  // OUT ↔ OUT (reorder revival queue). Cross-team picks are rejected.
   function handleSwapTap(playerId: string) {
     if (swapFirstId === null) {
       setSwapFirstId(playerId);
@@ -762,38 +763,42 @@ export function ScoringConsole({
       setSwapFirstId(null);
       return;
     }
-    const outPlayerId = swapFirstId;
-    const livePlayerId = playerId;
-    // Look up names from the defending slots so the loading + success
-    // toasts can mention the actual players. Falls back to "player" if
-    // anything is missing.
     const allSlots = [...homeSlots, ...awaySlots];
-    const outPlayer = allSlots.find((s) => s.playerId === outPlayerId);
-    const livePlayer = allSlots.find((s) => s.playerId === livePlayerId);
+    const firstPlayer = allSlots.find((s) => s.playerId === swapFirstId);
+    const secondPlayer = allSlots.find((s) => s.playerId === playerId);
     const fmt = (slot: PlayerSlot | undefined) =>
       slot
         ? slot.jerseyNumber != null
           ? `${slot.fullName} #${slot.jerseyNumber}`
           : slot.fullName
         : 'player';
-    const outLabel = fmt(outPlayer);
-    const liveLabel = fmt(livePlayer);
+    const firstLabel = fmt(firstPlayer);
+    const secondLabel = fmt(secondPlayer);
 
+    // Same-team guard (also enforced server-side, but a clean toast is nicer
+    // than a generic server error).
+    const firstTeamId = homeSlots.some((s) => s.playerId === swapFirstId) ? home.id : away.id;
+    const secondTeamId = homeSlots.some((s) => s.playerId === playerId) ? home.id : away.id;
+    if (firstTeamId !== secondTeamId) {
+      toast.error('Both players must be on the same team');
+      setSwapFirstId(null);
+      return;
+    }
+
+    const firstId = swapFirstId;
     exitSwapMode();
-    const toastId = toast.loading(`Swapping ${outLabel} ↔ ${liveLabel}…`);
+    const toastId = toast.loading(`Swapping ${firstLabel} ↔ ${secondLabel}…`);
     startTransition(async () => {
       const res = await swapPlayerStatesAction({
         matchId,
         tournamentId,
-        outPlayerId,
-        livePlayerId,
+        outPlayerId: firstId,
+        livePlayerId: playerId,
       });
       if (res?.error) {
         toast.error(res.error, { id: toastId });
       } else {
-        toast.success(`Swapped: ${outLabel} → on mat, ${liveLabel} → out`, {
-          id: toastId,
-        });
+        toast.success(`Swapped: ${firstLabel} ↔ ${secondLabel}`, { id: toastId });
         router.refresh();
       }
     });
@@ -1523,8 +1528,8 @@ export function ScoringConsole({
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
                   {swapMode
                     ? swapFirstId
-                      ? 'Swap · now pick the LIVE player to bring off the mat'
-                      : 'Swap · pick the OUT (died) player to bring back on mat'
+                      ? 'Swap · pick the second player on the same team to exchange states'
+                      : 'Swap · pick any player (raider or defender side, any state)'
                     : raiderId
                       ? `Raid in progress · ${actionsThisRaid} action${actionsThisRaid === 1 ? '' : 's'} so far`
                       : 'Pick players for this raid'}
@@ -1549,29 +1554,27 @@ export function ScoringConsole({
                       Complete Raid
                     </Button>
                   )}
-                  {/* Swap toggle: surfaces only when the defending team has
-                      at least one OUT player AND at least one on-mat player —
-                      the swap only makes sense when both sides exist. Hidden
-                      while a raid action queue is pending so the operator
-                      finishes the in-flight raid first. */}
-                  {defendingSlots.some((s) => s.state === 'out') &&
-                    defendingSlots.some((s) => s.state === 'on_mat') &&
-                    pendingActions.length === 0 && (
-                      <button
-                        type="button"
-                        onClick={() => (swapMode ? exitSwapMode() : setSwapMode(true))}
-                        disabled={pending}
-                        className={cn(
-                          'rounded-md border px-2 py-1 text-[10px] font-bold uppercase tracking-wider transition-colors',
-                          swapMode
-                            ? 'border-amber-500 bg-amber-500/15 text-amber-600'
-                            : 'border-border text-muted-foreground hover:border-amber-500 hover:text-amber-600',
-                        )}
-                        title="Swap an OUT player with an ON-MAT player on the same team"
-                      >
-                        {swapMode ? 'Cancel swap' : 'Swap'}
-                      </button>
-                    )}
+                  {/* Swap toggle: exchange states between any two players on
+                      the same team. Works across raider AND defender columns
+                      and includes bench / out / on-mat picks. Hidden while a
+                      raid action queue is pending so the operator finishes
+                      the in-flight raid first. */}
+                  {pendingActions.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => (swapMode ? exitSwapMode() : setSwapMode(true))}
+                      disabled={pending}
+                      className={cn(
+                        'rounded-md border px-2 py-1 text-[10px] font-bold uppercase tracking-wider transition-colors',
+                        swapMode
+                          ? 'border-amber-500 bg-amber-500/15 text-amber-600'
+                          : 'border-border text-muted-foreground hover:border-amber-500 hover:text-amber-600',
+                      )}
+                      title="Swap two players' states on the same team — on-mat, bench, and out are all valid picks"
+                    >
+                      {swapMode ? 'Cancel swap' : 'Swap'}
+                    </button>
+                  )}
                   {(raiderId || touchedCount > 0) && !swapMode && (
                     <button
                       type="button"
@@ -1595,21 +1598,42 @@ export function ScoringConsole({
                   label="Raider"
                   teamName={attacking.name}
                   tone="attack"
-                  helperText={raiderId ? '1 selected' : 'Tap one'}
+                  helperText={
+                    swapMode
+                      ? swapFirstId
+                        ? 'Pick second'
+                        : 'Pick any'
+                      : raiderId
+                        ? '1 selected'
+                        : 'Tap one'
+                  }
                 >
                   {attackingSlots.length === 0 ? (
                     <PickerEmpty />
                   ) : (
-                    attackingSlots.map((s) => (
-                      <PlayerChip
-                        key={s.playerId}
-                        slot={s}
-                        selected={raiderId === s.playerId}
-                        tone="attack"
-                        disabled={s.state !== 'on_mat'}
-                        onClick={() => setRaiderId(s.playerId)}
-                      />
-                    ))
+                    attackingSlots.map((s) => {
+                      // In swap mode, any state is selectable on either side.
+                      // After the first tap, only same-team picks are
+                      // actionable (cross-team picks toast an error in the
+                      // handler — leaving them clickable keeps the UI
+                      // readable instead of disabling half the board).
+                      return (
+                        <PlayerChip
+                          key={s.playerId}
+                          slot={s}
+                          selected={
+                            swapMode
+                              ? swapFirstId === s.playerId
+                              : raiderId === s.playerId
+                          }
+                          tone="attack"
+                          disabled={swapMode ? false : s.state !== 'on_mat'}
+                          onClick={() =>
+                            swapMode ? handleSwapTap(s.playerId) : setRaiderId(s.playerId)
+                          }
+                        />
+                      );
+                    })
                   )}
                 </PickerColumn>
                 <PickerColumn
@@ -1619,8 +1643,8 @@ export function ScoringConsole({
                   helperText={
                     swapMode
                       ? swapFirstId
-                        ? 'Pick LIVE'
-                        : 'Pick OUT'
+                        ? 'Pick second'
+                        : 'Pick any'
                       : touchedCount > 0
                         ? `${touchedCount} selected`
                         : 'Tap any'
@@ -1630,14 +1654,8 @@ export function ScoringConsole({
                     <PickerEmpty />
                   ) : (
                     defendingSlots.map((s) => {
-                      // In swap mode, the picker becomes a two-step state-swap:
-                      // first tap picks an OUT player, second tap picks an
-                      // ON-MAT player. Disabled rules flip after the first tap.
-                      const swapDisabled =
-                        swapMode &&
-                        (swapFirstId === null
-                          ? s.state !== 'out'
-                          : s.state !== 'on_mat' && s.playerId !== swapFirstId);
+                      // In swap mode, any state on either column is selectable;
+                      // the cross-team check happens in handleSwapTap.
                       return (
                         <PlayerChip
                           key={s.playerId}
@@ -1648,7 +1666,7 @@ export function ScoringConsole({
                               : touchedDefenderIds.includes(s.playerId)
                           }
                           tone="defend"
-                          disabled={swapMode ? swapDisabled : s.state !== 'on_mat'}
+                          disabled={swapMode ? false : s.state !== 'on_mat'}
                           onClick={() =>
                             swapMode ? handleSwapTap(s.playerId) : toggleDefender(s.playerId)
                           }
@@ -3520,7 +3538,12 @@ function PlayerChip({
       </span>
       {slot.state === 'out' && (
         <span className="rounded bg-red-500/15 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-500">
-          OUT
+          OUT{slot.outSeq != null ? ` ${slot.outSeq}` : ''}
+        </span>
+      )}
+      {slot.state === 'bench' && (
+        <span className="rounded bg-slate-500/15 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">
+          BENCH
         </span>
       )}
       {slot.state === 'suspended' && (
