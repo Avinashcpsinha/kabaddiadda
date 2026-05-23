@@ -1083,14 +1083,13 @@ export function ScoringConsole({
   // Slots split by attacking / defending side based on the toggle.
   // Show the active 7: on-mat players (selectable) + out/suspended/red-carded
   // (visible but greyed out so the operator sees who has died).
+  // In swap mode the bench is also shown so the scorer can rotate any of
+  // the full 12-player roster on/off without burning a substitution event.
   const isActive = (state: string) =>
     state === 'on_mat' || state === 'out' || state === 'suspended' || state === 'red_carded';
-  const attackingSlots = (attackingId === home.id ? homeSlots : awaySlots).filter((s) =>
-    isActive(s.state),
-  );
-  const defendingSlots = (attackingId === home.id ? awaySlots : homeSlots).filter((s) =>
-    isActive(s.state),
-  );
+  const slotFilter = (s: PlayerSlot) => (swapMode ? true : isActive(s.state));
+  const attackingSlots = (attackingId === home.id ? homeSlots : awaySlots).filter(slotFilter);
+  const defendingSlots = (attackingId === home.id ? awaySlots : homeSlots).filter(slotFilter);
   const touchedCount = touchedDefenderIds.length;
   // Count defenders currently on mat — used to gate Super Tackle (PKL: only
   // counts when defending side has ≤3 on mat) and to validate other actions.
