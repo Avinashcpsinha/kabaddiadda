@@ -1027,7 +1027,7 @@ export function ScoringConsole({
         clockSeconds: clock,
       });
       if (!res?.error) {
-        toast.success(`Manual event recorded — ${EVENT_LABEL[input.type] ?? input.type}`);
+        toast.success(`Override recorded — ${EVENT_LABEL[input.type] ?? input.type}`);
         setOpenModal(null);
       }
       return res;
@@ -2081,11 +2081,11 @@ export function ScoringConsole({
               />
               <SmallActionBtn
                 icon={<Wrench className="h-3 w-3" />}
-                label="Manual"
+                label="Override"
                 onClick={() => setOpenModal({ kind: 'manual', teamId: attackingId })}
                 disabled={pending}
                 tone="neutral"
-                title="Manual event — pick any event type, team and players, then override the points. Score auto-adjusts."
+                title="Override — record any event for any player (bench / out / suspended included), with custom point deltas. Use this to fix a missed call or attribute to a different player."
               />
             </div>
 
@@ -2227,7 +2227,7 @@ export function ScoringConsole({
       )}
 
       {openModal?.kind === 'manual' && (
-        <Modal onClose={() => setOpenModal(null)} title="Manual event">
+        <Modal onClose={() => setOpenModal(null)} title="Override event">
           <ManualEventControls
             initialTeamId={openModal.teamId}
             home={home}
@@ -2937,8 +2937,24 @@ function ManualEventControls({
   const cfg = MANUAL_CFG_BY_TYPE[type]!;
   const attackingSlots = teamId === home.id ? homeSlots : awaySlots;
   const defendingSlots = teamId === home.id ? awaySlots : homeSlots;
-  const onMatRaiders = attackingSlots.filter((s) => s.state === 'on_mat');
-  const onMatDefenders = defendingSlots.filter((s) => s.state === 'on_mat');
+  // Override mode: show every roster slot regardless of state. Sort so
+  // on-mat players surface first (most common pick), then bench, then
+  // out / suspended / red-carded / injured.
+  const stateRank: Record<string, number> = {
+    on_mat: 0,
+    bench: 1,
+    out: 2,
+    suspended: 3,
+    red_carded: 4,
+    injured: 5,
+  };
+  const sortSlots = (a: PlayerSlot, b: PlayerSlot) => {
+    const r = (stateRank[a.state] ?? 99) - (stateRank[b.state] ?? 99);
+    if (r !== 0) return r;
+    return (a.jerseyNumber ?? 9999) - (b.jerseyNumber ?? 9999);
+  };
+  const raiderChoices = [...attackingSlots].sort(sortSlots);
+  const defenderChoices = [...defendingSlots].sort(sortSlots);
 
   // Seed default points whenever the event type or defender count changes.
   // Operator can still tweak the inputs after — the next type change re-seeds.
@@ -3026,14 +3042,16 @@ function ManualEventControls({
         </div>
       </div>
 
-      {/* Raider — required when needsRaider */}
+      {/* Raider — required when needsRaider. Override mode shows ALL roster
+          players (on-mat first, then bench / out / etc.) so the scorer can
+          attribute an event to any player. */}
       {cfg.needsRaider && (
         <div>
           <Label>
-            Raider <span className="text-muted-foreground">(on mat)</span>
+            Raider <span className="text-muted-foreground">(any roster player)</span>
           </Label>
-          {onMatRaiders.length === 0 ? (
-            <p className="mt-1 text-xs text-muted-foreground">No on-mat players for this team.</p>
+          {raiderChoices.length === 0 ? (
+            <p className="mt-1 text-xs text-muted-foreground">No roster players for this team.</p>
           ) : (
             <select
               value={raiderId ?? ''}
@@ -3041,10 +3059,10 @@ function ManualEventControls({
               className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
             >
               <option value="">— Select raider —</option>
-              {onMatRaiders.map((s) => (
+              {raiderChoices.map((s) => (
                 <option key={s.playerId} value={s.playerId}>
                   {s.jerseyNumber != null ? `#${s.jerseyNumber} ` : ''}
-                  {s.fullName}
+                  {s.fullName} · {formatPlayerState(s.state)}
                 </option>
               ))}
             </select>
@@ -3052,20 +3070,21 @@ function ManualEventControls({
         </div>
       )}
 
-      {/* Defenders — required when needsDefenders, optional otherwise */}
+      {/* Defenders — required when needsDefenders, optional otherwise.
+          Override mode shows everyone on the opposing roster regardless of state. */}
       {(cfg.needsDefenders || cfg.needsRaider) && (
         <div>
           <Label>
             Defenders{' '}
             <span className="text-muted-foreground">
-              {cfg.needsDefenders ? '(at least 1)' : '(optional)'}
+              {cfg.needsDefenders ? '(at least 1, any roster player)' : '(optional, any roster player)'}
             </span>
           </Label>
-          {onMatDefenders.length === 0 ? (
-            <p className="mt-1 text-xs text-muted-foreground">No on-mat defenders for the other side.</p>
+          {defenderChoices.length === 0 ? (
+            <p className="mt-1 text-xs text-muted-foreground">No roster players for the other side.</p>
           ) : (
-            <ul className="mt-1 grid max-h-[140px] grid-cols-2 gap-1 overflow-y-auto rounded-md border p-1">
-              {onMatDefenders.map((s) => {
+            <ul className="mt-1 grid max-h-[180px] grid-cols-2 gap-1 overflow-y-auto rounded-md border p-1">
+              {defenderChoices.map((s) => {
                 const checked = defenderIds.includes(s.playerId);
                 return (
                   <li key={s.playerId}>
@@ -3075,9 +3094,12 @@ function ManualEventControls({
                         checked={checked}
                         onChange={() => toggleDefender(s.playerId)}
                       />
-                      <span className="truncate">
+                      <span className="flex-1 truncate">
                         {s.jerseyNumber != null ? `#${s.jerseyNumber} ` : ''}
                         {s.fullName}
+                      </span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        {formatPlayerState(s.state)}
                       </span>
                     </label>
                   </li>
@@ -3120,6 +3142,18 @@ function ManualEventControls({
 
 function Label({ children }: { children: React.ReactNode }) {
   return <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{children}</span>;
+}
+
+function formatPlayerState(state: string): string {
+  switch (state) {
+    case 'on_mat': return 'on mat';
+    case 'bench': return 'bench';
+    case 'out': return 'out';
+    case 'suspended': return 'suspended';
+    case 'red_carded': return 'red-carded';
+    case 'injured': return 'injured';
+    default: return state;
+  }
 }
 
 function NumberStepper({
