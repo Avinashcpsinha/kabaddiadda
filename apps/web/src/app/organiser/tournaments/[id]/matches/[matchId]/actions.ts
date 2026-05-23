@@ -1063,7 +1063,15 @@ export async function setMatchStatusAction(
   tournamentId: string,
   matchId: string,
   status: 'scheduled' | 'live' | 'half_time' | 'completed' | 'abandoned',
-  patch?: { current_half?: number; clock_seconds?: number },
+  patch?: {
+    current_half?: number;
+    clock_seconds?: number;
+    /** Resets the do-or-die streak counter for the home side. Pass 0 on
+     *  half-rollover so a do-or-die that was pending at half time
+     *  doesn't carry into the next half. */
+    home_dod_counter?: number;
+    away_dod_counter?: number;
+  },
 ) {
   const supabase = await createClient();
   const { error } = await supabase

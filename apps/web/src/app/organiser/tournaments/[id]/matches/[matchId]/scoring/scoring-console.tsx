@@ -1248,6 +1248,9 @@ export function ScoringConsole({
     // begins live but paused at 0:00. The clock starts ticking when the
     // operator picks the opening raider of the half (auto-start effect)
     // or hits play manually.
+    //
+    // Reset both teams' do-or-die counters at the half boundary — an empty
+    // streak from H1 shouldn't make the first raid of H2 a do-or-die.
     const next = half + 1;
     setHalf(next);
     setClock(0);
@@ -1256,7 +1259,12 @@ export function ScoringConsole({
     await setMatchStatusAction(tournamentId, matchId, 'live', {
       current_half: next,
       clock_seconds: 0,
+      home_dod_counter: 0,
+      away_dod_counter: 0,
     });
+    // Pull the reset dod counters from the server so isDodActive (derived
+    // from initial.*DodCounter) reflects the new half.
+    router.refresh();
   }
 
   async function endMatch() {
