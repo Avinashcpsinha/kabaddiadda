@@ -147,15 +147,22 @@ function DemoButton({
   compact?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label="Book a demo"
-      className="relative inline-flex h-14 items-center gap-2 rounded-full bg-card px-5 text-base font-semibold tracking-tight text-foreground shadow-2xl ring-2 ring-primary/40 transition-all duration-200 hover:scale-[1.04] hover:ring-primary active:scale-[0.98]"
-    >
-      <CalendarCheck className="h-5 w-5 text-primary" />
-      <span>{compact ? 'Book demo' : 'Book a Demo'}</span>
-    </button>
+    <div className="relative">
+      {/* Pulse ring — visually nudges the eye. Matches the TryDemo FAB pattern. */}
+      <span
+        aria-hidden
+        className="absolute inset-0 rounded-full bg-violet-500 opacity-60 motion-safe:animate-ping"
+      />
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label="Book a demo"
+        className="relative inline-flex h-14 items-center gap-2 rounded-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-pink-500 px-5 text-base font-bold tracking-tight text-white shadow-2xl shadow-fuchsia-500/50 ring-2 ring-white/20 transition-all duration-200 hover:scale-[1.05] hover:shadow-fuchsia-500/70 active:scale-[0.98]"
+      >
+        <CalendarCheck className="h-5 w-5" />
+        <span>{compact ? 'Book demo' : 'Book a Demo'}</span>
+      </button>
+    </div>
   );
 }
 
