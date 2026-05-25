@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { CalendarCheck, Loader2, X } from 'lucide-react';
+import { CalendarCheck, CheckCircle2, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,21 +10,31 @@ import { submitDemoRequestAction } from './actions';
 
 export function BookDemoFab() {
   const [open, setOpen] = React.useState(false);
+  const [submittedName, setSubmittedName] = React.useState<string | null>(null);
   const [pending, startTransition] = React.useTransition();
   const formRef = React.useRef<HTMLFormElement>(null);
 
   React.useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && !pending) setOpen(false);
+      if (e.key === 'Escape' && !pending) handleClose();
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, pending]);
+
+  function handleClose() {
+    setOpen(false);
+    // Reset the thank-you state after the close animation so the next open
+    // shows the form, not the confirmation.
+    setTimeout(() => setSubmittedName(null), 150);
+  }
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    const name = (fd.get('name') as string | null)?.trim() || 'there';
     fd.set('page_url', typeof window !== 'undefined' ? window.location.pathname : '');
     startTransition(async () => {
       const res = await submitDemoRequestAction(fd);
@@ -33,8 +43,7 @@ export function BookDemoFab() {
         return;
       }
       if (res?.success) {
-        toast.success(res.success);
-        setOpen(false);
+        setSubmittedName(name);
         formRef.current?.reset();
       }
     });
@@ -54,11 +63,11 @@ export function BookDemoFab() {
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 backdrop-blur-sm sm:items-center"
           onClick={() => {
-            if (!pending) setOpen(false);
+            if (!pending) handleClose();
           }}
           role="dialog"
           aria-modal="true"
-          aria-label="Book a demo"
+          aria-label={submittedName ? 'Demo request received' : 'Book a demo'}
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -66,7 +75,7 @@ export function BookDemoFab() {
           >
             <button
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={handleClose}
               disabled={pending}
               className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground transition hover:bg-accent hover:text-foreground disabled:opacity-50"
               aria-label="Close"
@@ -74,6 +83,10 @@ export function BookDemoFab() {
               <X className="h-4 w-4" />
             </button>
 
+            {submittedName ? (
+              <ThankYou name={submittedName} onClose={handleClose} />
+            ) : (
+              <>
             <h2 className="text-lg font-semibold tracking-tight">Book a demo</h2>
             <p className="mt-1 text-xs text-muted-foreground">
               Tell us about your league or tournament — we'll walk you through Kabaddiadda
@@ -132,10 +145,38 @@ export function BookDemoFab() {
                 )}
               </Button>
             </form>
+              </>
+            )}
           </div>
         </div>
       )}
     </>
+  );
+}
+
+function ThankYou({ name, onClose }: { name: string; onClose: () => void }) {
+  return (
+    <div className="py-4 text-center">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15 ring-4 ring-emerald-500/20">
+        <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+      </div>
+      <h2 className="mt-4 text-xl font-semibold tracking-tight">
+        Thanks, {name}! You're booked.
+      </h2>
+      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+        We've got your request and will reach out within one business day on your
+        WhatsApp or email to set up a personalised walk-through.
+      </p>
+      <div className="mt-5 rounded-lg border border-border/70 bg-muted/30 p-3 text-left text-xs text-muted-foreground">
+        <span className="font-medium text-foreground">While you wait — </span>
+        try the live scoring console yourself with the{' '}
+        <span className="font-medium text-primary">Try live scoring</span> button.
+        No signup needed, you get a sandboxed league seeded with sample matches.
+      </div>
+      <Button className="mt-5 w-full" onClick={onClose}>
+        Done
+      </Button>
+    </div>
   );
 }
 
