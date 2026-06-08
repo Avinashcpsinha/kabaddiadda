@@ -159,6 +159,12 @@ export async function createDemoSession(): Promise<DemoSession> {
       away_team_id: awayTeam.id,
       scheduled_at: liveScheduledAt,
       status: 'live',
+      // Full-rules engine ON. The demo seeds lineups + match_player_state
+      // below but never runs the lineup-lock flow that flips a match to
+      // scoring_version 2, so without this the out/revival/all-out engine
+      // (and the no-revival-at-full-strength rule) stays disabled. Setting
+      // it here activates the trigger for the seeded live match.
+      scoring_version: 2,
       home_score: 14,
       away_score: 12,
       current_half: 1,
