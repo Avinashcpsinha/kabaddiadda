@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, Crown, Users } from 'lucide-react';
+import { ArrowLeft, Crown, Users, UserCog } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty';
@@ -9,12 +9,19 @@ import { createClient } from '@/lib/supabase/server';
 import { initials } from '@/lib/utils';
 import { AddPlayerForm } from './add-player-form';
 import { DeletePlayer } from './delete-player';
+import { AddCoachForm } from './add-coach-form';
+import { DeleteCoach } from './delete-coach';
 
 const ROLE_LABEL: Record<string, string> = {
   raider: 'Raider',
   all_rounder: 'All-rounder',
   defender_corner: 'Defender · Corner',
   defender_cover: 'Defender · Cover',
+};
+
+const COACH_ROLE_LABEL: Record<string, string> = {
+  head_coach: 'Head coach',
+  assistant_coach: 'Assistant coach',
 };
 
 const ROLE_TONE: Record<string, string> = {
@@ -50,6 +57,14 @@ export default async function TeamDetailPage({
     )
     .eq('team_id', teamId)
     .order('jersey_number', { ascending: true, nullsFirst: false });
+
+  const { data: coaches } = await supabase
+    .from('coaches')
+    .select('id, full_name, role, photo_url, person:person_id(id, mobile)')
+    .eq('team_id', teamId)
+    // Head coaches first, then assistants; stable by creation order within each.
+    .order('role', { ascending: true })
+    .order('created_at', { ascending: true });
 
   const captainCount = players?.filter((p) => p.is_captain).length ?? 0;
 
@@ -193,6 +208,89 @@ export default async function TeamDetailPage({
           <CardContent className="p-6">
             <h3 className="mb-4 font-semibold">Add player</h3>
             <AddPlayerForm tournamentId={id} teamId={teamId} hasCaptain={captainCount > 0} />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* COACHING STAFF — separate from the playing roster; coaches live
+          entirely outside the match engine. */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
+            <UserCog className="h-4 w-4 text-muted-foreground" />
+            Coaching staff
+            <span className="text-sm font-normal text-muted-foreground">
+              {coaches?.length ?? 0}
+            </span>
+          </h2>
+          {!coaches || coaches.length === 0 ? (
+            <EmptyState
+              icon={UserCog}
+              title="No coaching staff yet"
+              description="Use the form on the right to add a head coach or assistant."
+            />
+          ) : (
+            <Card>
+              <CardContent className="p-0">
+                <table className="w-full text-sm">
+                  <thead className="border-b border-border/50 bg-muted/30 text-left text-xs uppercase text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-3">Coach</th>
+                      <th className="px-4 py-3">Role</th>
+                      <th className="px-4 py-3 hidden md:table-cell">Mobile</th>
+                      <th className="px-4 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {coaches.map((c) => (
+                      <tr key={c.id} className="border-b border-border/30 last:border-0">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <PlayerAvatar
+                              photoUrl={c.photo_url}
+                              name={c.full_name}
+                              color={team.primary_color}
+                            />
+                            <span className="truncate font-medium">{c.full_name}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge
+                            variant="outline"
+                            className={`font-normal ring-1 ${
+                              c.role === 'head_coach'
+                                ? 'bg-primary/15 text-primary ring-primary/30'
+                                : 'bg-muted text-muted-foreground ring-border'
+                            }`}
+                          >
+                            {COACH_ROLE_LABEL[c.role] ?? c.role}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 hidden md:table-cell font-mono text-xs text-muted-foreground">
+                          {/* @ts-expect-error supabase nested join typing */}
+                          {c.person?.mobile ?? '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <DeleteCoach
+                            tournamentId={id}
+                            teamId={teamId}
+                            coachId={c.id}
+                            name={c.full_name}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        <Card className="h-fit">
+          <CardContent className="p-6">
+            <h3 className="mb-4 font-semibold">Add coach</h3>
+            <AddCoachForm tournamentId={id} teamId={teamId} />
           </CardContent>
         </Card>
       </div>

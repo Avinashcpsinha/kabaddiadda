@@ -60,6 +60,7 @@ export default async function TeamsPage({
   // Player counts in one batched query
   const teamIds = teams.map((t) => t.id);
   const playerCountByTeam = new Map<string, number>();
+  const headCoachByTeam = new Map<string, string>();
   if (teamIds.length > 0) {
     const { data: players } = await supabase
       .from('players')
@@ -67,6 +68,18 @@ export default async function TeamsPage({
       .in('team_id', teamIds);
     for (const p of players ?? []) {
       playerCountByTeam.set(p.team_id, (playerCountByTeam.get(p.team_id) ?? 0) + 1);
+    }
+
+    // Head coaches via the public-safe view (no PII). One per team.
+    const { data: coaches } = await supabase
+      .from('public_coaches')
+      .select('team_id, full_name, role')
+      .in('team_id', teamIds)
+      .eq('role', 'head_coach');
+    for (const c of coaches ?? []) {
+      if (c.team_id && !headCoachByTeam.has(c.team_id)) {
+        headCoachByTeam.set(c.team_id, c.full_name);
+      }
     }
   }
 
@@ -174,6 +187,11 @@ export default async function TeamsPage({
                       </>
                     )}
                   </div>
+                  {headCoachByTeam.get(t.id) && (
+                    <div className="mt-1 truncate text-[10px] text-primary">
+                      Coach: {headCoachByTeam.get(t.id)}
+                    </div>
+                  )}
                 </div>
               </Link>
             );

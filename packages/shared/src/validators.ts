@@ -78,6 +78,14 @@ export const playerCreateSchema = z.object({
   aadhaar: aadhaarSchema.optional(),
 });
 
+export const coachCreateSchema = z.object({
+  fullName: z.string().min(2).max(80),
+  role: z.enum(['head_coach', 'assistant_coach']).default('head_coach'),
+  mobile: mobileSchema.optional(),
+  pan: panSchema.optional(),
+  aadhaar: aadhaarSchema.optional(),
+});
+
 export const matchEventSchema = z.object({
   matchId: z.string().uuid(),
   type: z.enum([
@@ -117,4 +125,5 @@ export type TenantCreateInput = z.infer<typeof tenantCreateSchema>;
 export type TournamentCreateInput = z.infer<typeof tournamentCreateSchema>;
 export type TeamCreateInput = z.infer<typeof teamCreateSchema>;
 export type PlayerCreateInput = z.infer<typeof playerCreateSchema>;
+export type CoachCreateInput = z.infer<typeof coachCreateSchema>;
 export type MatchEventInput = z.infer<typeof matchEventSchema>;

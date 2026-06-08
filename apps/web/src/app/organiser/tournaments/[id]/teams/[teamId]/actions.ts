@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { randomUUID } from 'node:crypto';
-import { playerCreateSchema, mobileSchema } from '@kabaddiadda/shared';
+import { playerCreateSchema, coachCreateSchema, mobileSchema } from '@kabaddiadda/shared';
 import { createClient } from '@/lib/supabase/server';
 import { getSessionUser } from '@/lib/auth';
 
@@ -198,6 +198,92 @@ export async function deletePlayerAction(
 ) {
   const supabase = await createClient();
   const { error } = await supabase.from('players').delete().eq('id', playerId);
+  if (error) return { error: error.message };
+  revalidatePath(`/organiser/tournaments/${tournamentId}/teams/${teamId}`);
+  return { ok: true };
+}
+
+// =====================================================================
+// Coaching staff — mirrors the player flow above. A coach is a person in
+// a coaching role on a team; identity (mobile / PII / photo) lives on the
+// shared `people` record, so a coach who is also a player reuses one
+// person row. Coaches touch none of the match engine.
+// =====================================================================
+
+export async function createCoachAction(
+  tournamentId: string,
+  teamId: string,
+  formData: FormData,
+) {
+  const user = await getSessionUser();
+  if (!user?.tenantId) return { error: 'Not authorised' };
+
+  const parsed = coachCreateSchema.safeParse({
+    fullName: String(formData.get('fullName') ?? '').trim(),
+    role: String(formData.get('role') ?? 'head_coach'),
+    mobile: readTrimmed(formData, 'mobile'),
+    pan: readTrimmed(formData, 'pan')?.toUpperCase(),
+    aadhaar: readTrimmed(formData, 'aadhaar')?.replace(/\s+/g, ''),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+
+  const supabase = await createClient();
+
+  let photoUrl: string | undefined;
+  const photo = formData.get('photo');
+  if (photo instanceof File && photo.size > 0) {
+    // Coach photos share the player-photos bucket + tenant/team path scheme.
+    const res = await uploadPlayerPhoto(supabase, user.tenantId, teamId, photo);
+    if (res.error) return { error: res.error };
+    photoUrl = res.url;
+  }
+
+  let personId: string | null = null;
+  if (parsed.data.mobile) {
+    try {
+      personId = await findOrCreatePerson(supabase, {
+        mobile: parsed.data.mobile,
+        fullName: parsed.data.fullName,
+        pan: parsed.data.pan,
+        aadhaar: parsed.data.aadhaar,
+        photoUrl,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to register person';
+      return { error: msg };
+    }
+  }
+
+  const { error } = await supabase.from('coaches').insert({
+    tenant_id: user.tenantId,
+    team_id: teamId,
+    person_id: personId,
+    full_name: parsed.data.fullName,
+    role: parsed.data.role,
+    photo_url: photoUrl,
+  });
+
+  if (error) {
+    if (error.code === '23505') {
+      return { error: 'This person is already a coach on this team.' };
+    }
+    if (error.code === '23514') {
+      return { error: 'A field failed format validation (PAN / Aadhaar).' };
+    }
+    return { error: error.message };
+  }
+
+  revalidatePath(`/organiser/tournaments/${tournamentId}/teams/${teamId}`);
+  return { ok: true };
+}
+
+export async function deleteCoachAction(
+  tournamentId: string,
+  teamId: string,
+  coachId: string,
+) {
+  const supabase = await createClient();
+  const { error } = await supabase.from('coaches').delete().eq('id', coachId);
   if (error) return { error: error.message };
   revalidatePath(`/organiser/tournaments/${tournamentId}/teams/${teamId}`);
   return { ok: true };

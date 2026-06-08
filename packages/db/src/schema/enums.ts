@@ -65,6 +65,8 @@ export const playerRoleEnum = pgEnum('player_role', [
   'defender_cover',
 ]);
 
+export const coachRoleEnum = pgEnum('coach_role', ['head_coach', 'assistant_coach']);
+
 export const playerMatchStateEnum = pgEnum('player_match_state', [
   'on_mat',
   'bench',
