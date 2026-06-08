@@ -316,6 +316,93 @@ function describeEvent(e: RecentEvent, attackingTeamName: string | null): string
   }
 }
 
+// Event types that belong to a raid and collapse into a single event-log
+// line. Everything else (cards, subs, time-outs, reviews, technical
+// points, all-out) breaks the run and renders as its own standalone line.
+const RAID_GROUP_TYPES = new Set([
+  'raid_point',
+  'super_raid',
+  'tackle_point',
+  'super_tackle',
+  'bonus_point',
+  'do_or_die_raid',
+  'empty_raid',
+]);
+
+interface EventGroup {
+  key: string;
+  /** Newest-first, same order as the source list. */
+  events: RecentEvent[];
+  attackingTeamId: string;
+  isRaid: boolean;
+}
+
+/**
+ * Collapse the flat (newest-first) event list into one entry per raid.
+ * A raid = a contiguous run of raid-type events sharing the same
+ * attacking team — raids alternate teams, so a team change marks a new
+ * raid. Non-raid events break the run and stand alone. This is what
+ * makes a multi-touch raid show as a single event-log line.
+ */
+function groupEventsByRaid(events: RecentEvent[]): EventGroup[] {
+  const groups: EventGroup[] = [];
+  for (const e of events) {
+    const isRaid = RAID_GROUP_TYPES.has(e.type);
+    const last = groups[groups.length - 1];
+    if (isRaid && last && last.isRaid && last.attackingTeamId === e.attacking_team_id) {
+      last.events.push(e);
+    } else {
+      groups.push({ key: e.id, events: [e], attackingTeamId: e.attacking_team_id, isRaid });
+    }
+  }
+  return groups;
+}
+
+/** Short clause for one event inside a multi-action raid summary. */
+function actionClause(e: RecentEvent): string {
+  const reason = e.reason ?? null;
+  const dN = e.defenders.length;
+  switch (e.type) {
+    case 'raid_point':
+      if (reason === 'defender_self_out' || reason === 'defender_out_of_bounds')
+        return dN > 1 ? `${dN} defenders out` : 'defender out';
+      if (reason === 'bonus_plus_defender_self_out') return 'bonus + defender out';
+      if (reason === 'touch_plus_defender_self_out') return 'touch + defender out';
+      if (reason === 'raider_self_out_plus_defender_self_out') return 'raider + defender out';
+      return dN > 1 ? `touch ×${dN}` : 'touch';
+    case 'super_raid':
+      return 'super raid';
+    case 'bonus_point':
+      return 'bonus';
+    case 'tackle_point':
+      if (reason === 'bonus_plus_tackle') return 'bonus, then tackled';
+      if (reason === 'bonus_plus_self_out') return 'bonus, then self-out';
+      if (reason === 'raider_self_out') return 'raider self-out';
+      if (reason === 'raider_out_of_bounds') return 'raider out of bounds';
+      return 'raider tackled';
+    case 'super_tackle':
+      return 'super tackle';
+    case 'empty_raid':
+      return 'empty raid';
+    case 'do_or_die_raid':
+      return e.points_attacker > 0 ? 'do-or-die converted' : 'do-or-die failed';
+    default:
+      return EVENT_LABEL[e.type] ?? e.type;
+  }
+}
+
+/**
+ * One-line summary of a multi-action raid: the raider followed by each
+ * action in chronological order. e.g. "Pawan #7: touch ×2, bonus".
+ */
+function describeRaidGroup(events: RecentEvent[]): string {
+  const chronological = [...events].reverse();
+  const raider = chronological.find((e) => e.raider)?.raider ?? null;
+  const clauses = chronological.map(actionClause);
+  const raiderText = raider ? `${formatPlayer(raider)}: ` : '';
+  return `${raiderText}${clauses.join(', ')}`;
+}
+
 export function ScoringConsole({
   matchId,
   tournamentId,
@@ -2172,43 +2259,57 @@ export function ScoringConsole({
               </p>
             ) : (
               <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pr-1">
-                {recentEvents.map((e) => {
-                  const homeAttacking = e.attacking_team_id === home.id;
+                {groupEventsByRaid(recentEvents).map((g) => {
+                  // The newest event in the raid (events are desc-ordered)
+                  // drives the timestamp + undo target. Points are summed
+                  // across the whole raid so the single line shows the raid's
+                  // net outcome.
+                  const head = g.events[0];
+                  if (!head) return null; // groups always have ≥1 event; satisfies the type checker
+                  const homeAttacking = g.attackingTeamId === home.id;
                   const team = homeAttacking ? home : away;
+                  const single = g.events.length === 1;
+                  const sumAttacker = g.events.reduce((n, ev) => n + ev.points_attacker, 0);
+                  const sumDefender = g.events.reduce((n, ev) => n + ev.points_defender, 0);
+                  const label = single
+                    ? describeEvent(head, team.short_name || team.name)
+                    : describeRaidGroup(g.events);
                   return (
                     <li
-                      key={e.id}
+                      key={g.key}
                       className="group flex shrink-0 items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-accent/30"
                     >
                       <span className="w-12 shrink-0 font-mono text-muted-foreground">
-                        Q{e.half}{' '}
-                        {Math.floor(e.clock_seconds / 60)
+                        Q{head.half}{' '}
+                        {Math.floor(head.clock_seconds / 60)
                           .toString()
                           .padStart(2, '0')}
-                        :{(e.clock_seconds % 60).toString().padStart(2, '0')}
+                        :{(head.clock_seconds % 60).toString().padStart(2, '0')}
                       </span>
                       <Badge variant="outline" className="shrink-0 text-[10px]">
                         {team.short_name || initials(team.name)}
                       </Badge>
-                      <span
-                        className="flex-1 truncate"
-                        title={describeEvent(e, team.short_name || team.name)}
-                      >
-                        {describeEvent(e, team.short_name || team.name)}
+                      <span className="flex-1 truncate" title={label}>
+                        {label}
                       </span>
                       <span className="font-mono">
-                        {e.points_attacker > 0 && (
-                          <span className="text-emerald-500">+{e.points_attacker}</span>
+                        {sumAttacker > 0 && (
+                          <span className="text-emerald-500">+{sumAttacker}</span>
                         )}
-                        {e.points_defender > 0 && (
-                          <span className="text-sky-500">+{e.points_defender}</span>
+                        {sumDefender > 0 && (
+                          <span className="text-sky-500">+{sumDefender}</span>
                         )}
                       </span>
                       <button
                         type="button"
-                        onClick={() => undo(e.id)}
+                        onClick={() => undo(head.id)}
                         className="opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
-                        aria-label="Undo event"
+                        aria-label={single ? 'Undo event' : 'Undo latest action in this raid'}
+                        title={
+                          single
+                            ? 'Undo this event'
+                            : 'Undo the most recent action in this raid'
+                        }
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>
