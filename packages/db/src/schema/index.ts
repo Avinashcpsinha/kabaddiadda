@@ -6,7 +6,6 @@ export * from './teams';
 export * from './people';
 export * from './players';
 export * from './coaches';
-export * from './demo-sessions';
 export * from './venues';
 export * from './matches';
 export * from './match-events';

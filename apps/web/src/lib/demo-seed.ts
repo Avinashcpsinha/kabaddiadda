@@ -95,16 +95,23 @@ export async function createDemoSession(lead?: DemoLead): Promise<DemoSession> {
     { onConflict: 'id' },
   );
 
-  // 3b) Record who launched this demo (lead capture). tenant_id is ON
-  // DELETE SET NULL, so this survives the nightly demo cleanup.
+  // 3b) Record who launched this demo as a LEAD in the unified inbox
+  // (demo_requests, source='instant'). It lives outside the demo tenant,
+  // so it survives the nightly sandbox cleanup — it's a lead, not
+  // throwaway. Shows up in /admin/demo-requests with call/email/status.
   if (lead?.name) {
-    await supabase.from('demo_sessions').insert({
+    const mobile =
+      lead.mobile && lead.mobile.replace(/[^\d+]/g, '').length >= 5 ? lead.mobile : null;
+    const email = lead.email && lead.email.includes('@') ? lead.email : null;
+    await supabase.from('demo_requests').insert({
       name: lead.name,
-      mobile: lead.mobile || null,
-      email: lead.email || null,
-      tenant_id: tenantId,
+      mobile,
+      email,
+      organisation: null,
       page_url: lead.pageUrl || null,
       user_agent: lead.userAgent || null,
+      source: 'instant',
+      status: 'new',
     });
   }
 

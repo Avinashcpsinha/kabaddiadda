@@ -13,22 +13,24 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatCard } from '@/components/dashboard/stat-card';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { StatusForm } from './status-form';
+import { PurgeSandboxesButton } from './purge-button';
 
-export const metadata = { title: 'Demo requests' };
+export const metadata = { title: 'Leads' };
 
 type DemoStatus = 'new' | 'contacted' | 'qualified' | 'won' | 'lost' | 'spam';
 
 interface DemoRequestRow {
   id: string;
   name: string;
-  mobile: string;
-  email: string;
-  organisation: string;
+  mobile: string | null;
+  email: string | null;
+  organisation: string | null;
   social_link: string | null;
   page_url: string | null;
   user_agent: string | null;
   status: DemoStatus;
   admin_note: string | null;
+  source: 'booked' | 'instant';
   created_at: string;
   user_id: string | null;
   user: { full_name: string | null; email: string } | null;
@@ -55,7 +57,7 @@ export default async function AdminDemoRequestsPage() {
     supabase
       .from('demo_requests')
       .select(
-        'id, name, mobile, email, organisation, social_link, page_url, user_agent, status, admin_note, created_at, user_id, user:user_id(full_name, email)',
+        'id, name, mobile, email, organisation, social_link, page_url, user_agent, status, admin_note, source, created_at, user_id, user:user_id(full_name, email)',
       )
       .order('created_at', { ascending: false })
       .limit(200),
@@ -65,11 +67,15 @@ export default async function AdminDemoRequestsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Demo requests</h1>
-        <p className="mt-1 text-muted-foreground">
-          Leads from the "Book a Demo" floating button on marketing pages.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Leads</h1>
+          <p className="mt-1 text-muted-foreground">
+            Booked demos and instant "Try live scoring" visitors — call, email, and track
+            each conversation. Leads are never removed by the demo cleanup.
+          </p>
+        </div>
+        <PurgeSandboxesButton />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -97,11 +103,14 @@ export default async function AdminDemoRequestsPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-base font-semibold">{r.name}</span>
                         <StatusBadge status={r.status} />
+                        <SourceBadge source={r.source} />
                       </div>
-                      <div className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
-                        <Building2 className="h-3.5 w-3.5" />
-                        {r.organisation}
-                      </div>
+                      {r.organisation && (
+                        <div className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
+                          <Building2 className="h-3.5 w-3.5" />
+                          {r.organisation}
+                        </div>
+                      )}
                     </div>
                     <span className="text-xs text-muted-foreground">
                       {new Date(r.created_at).toLocaleString('en-IN', {
@@ -112,17 +121,24 @@ export default async function AdminDemoRequestsPage() {
                   </div>
 
                   <dl className="mt-3 grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
-                    <ContactLine
-                      icon={<Phone className="h-3.5 w-3.5" />}
-                      href={`tel:${r.mobile.replace(/\s+/g, '')}`}
-                      whatsapp={`https://wa.me/${r.mobile.replace(/[^\d+]/g, '').replace(/^\+/, '')}`}
-                      label={r.mobile}
-                    />
-                    <ContactLine
-                      icon={<Mail className="h-3.5 w-3.5" />}
-                      href={`mailto:${r.email}`}
-                      label={r.email}
-                    />
+                    {r.mobile && (
+                      <ContactLine
+                        icon={<Phone className="h-3.5 w-3.5" />}
+                        href={`tel:${r.mobile.replace(/\s+/g, '')}`}
+                        whatsapp={`https://wa.me/${r.mobile.replace(/[^\d+]/g, '').replace(/^\+/, '')}`}
+                        label={r.mobile}
+                      />
+                    )}
+                    {r.email && (
+                      <ContactLine
+                        icon={<Mail className="h-3.5 w-3.5" />}
+                        href={`mailto:${r.email}`}
+                        label={r.email}
+                      />
+                    )}
+                    {!r.mobile && !r.email && (
+                      <span className="text-sm text-muted-foreground">No contact provided</span>
+                    )}
                     {r.social_link && (
                       <ContactLine
                         icon={<LinkIcon className="h-3.5 w-3.5" />}
@@ -205,6 +221,16 @@ function ContactLine({
         </a>
       )}
     </div>
+  );
+}
+
+function SourceBadge({ source }: { source: 'booked' | 'instant' }) {
+  return source === 'instant' ? (
+    <Badge variant="outline" className="border-primary/40 text-primary">
+      Instant demo
+    </Badge>
+  ) : (
+    <Badge variant="outline">Booked</Badge>
   );
 }
 

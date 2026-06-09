@@ -30,16 +30,18 @@ test('instant demo: capture name + mobile, then land in the scoring console', as
     timeout: 30_000,
   });
 
-  // 4) The visitor was recorded in demo_sessions.
+  // 4) The visitor was recorded as a LEAD in the unified inbox
+  //    (demo_requests, source='instant').
   const { data } = await admin
-    .from('demo_sessions')
-    .select('name, mobile, tenant_id')
+    .from('demo_requests')
+    .select('name, mobile, source')
     .eq('name', name)
     .maybeSingle();
-  expect(data, 'a demo_sessions row should exist for this visitor').not.toBeNull();
+  expect(data, 'a demo_requests lead should exist for this visitor').not.toBeNull();
+  expect(data?.source).toBe('instant');
   expect(data?.mobile).toBe(mobile);
 
-  // 5) Cleanup — drop the sandbox tenant (cascades its data) + the lead row.
-  if (data?.tenant_id) await admin.from('tenants').delete().eq('id', data.tenant_id);
-  await admin.from('demo_sessions').delete().eq('name', name);
+  // 5) Cleanup the test lead. (The throwaway demo tenant is reaped by the
+  //    nightly cron / Purge demo sandboxes button.)
+  await admin.from('demo_requests').delete().eq('name', name);
 });
