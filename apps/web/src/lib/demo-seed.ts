@@ -33,7 +33,15 @@ export interface DemoSession {
  * Run-time at low concurrency: ~1.5-2 seconds per call (12 supabase round
  * trips, dominated by auth.admin.createUser + the player batch insert).
  */
-export async function createDemoSession(): Promise<DemoSession> {
+export interface DemoLead {
+  name?: string;
+  mobile?: string;
+  email?: string;
+  pageUrl?: string;
+  userAgent?: string;
+}
+
+export async function createDemoSession(lead?: DemoLead): Promise<DemoSession> {
   const supabase = createAdminClient();
 
   // Identifiers — generate fresh per session so concurrent visitors are
@@ -86,6 +94,19 @@ export async function createDemoSession(): Promise<DemoSession> {
     },
     { onConflict: 'id' },
   );
+
+  // 3b) Record who launched this demo (lead capture). tenant_id is ON
+  // DELETE SET NULL, so this survives the nightly demo cleanup.
+  if (lead?.name) {
+    await supabase.from('demo_sessions').insert({
+      name: lead.name,
+      mobile: lead.mobile || null,
+      email: lead.email || null,
+      tenant_id: tenantId,
+      page_url: lead.pageUrl || null,
+      user_agent: lead.userAgent || null,
+    });
+  }
 
   // 4) Tournament
   await supabase.from('tournaments').insert({

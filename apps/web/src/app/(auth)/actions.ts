@@ -77,8 +77,19 @@ export async function signOutAction() {
  * spawns its own tenant so concurrent visitors never collide. Sessions
  * older than 24 hours are reaped by /api/cron/reset-demo.
  */
-export async function tryDemoAction() {
-  const session = await createDemoSession();
+export async function tryDemoAction(formData?: FormData) {
+  const str = (k: string) => {
+    const v = formData?.get(k);
+    const s = typeof v === 'string' ? v.trim() : '';
+    return s || undefined;
+  };
+  const session = await createDemoSession({
+    name: str('name'),
+    mobile: str('mobile'),
+    email: str('email'),
+    pageUrl: str('page_url'),
+    userAgent: str('user_agent'),
+  });
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({
     email: session.email,

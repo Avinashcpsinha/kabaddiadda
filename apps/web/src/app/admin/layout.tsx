@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   MessageSquare,
   Settings,
+  Sparkles,
   Users,
 } from 'lucide-react';
 import { DashboardSidebar, type NavItem } from '@/components/dashboard/sidebar';
@@ -23,6 +24,7 @@ const NAV: NavItem[] = [
   { href: '/admin/traffic', label: 'Traffic', icon: <BarChart3 className={ICON} /> },
   { href: '/admin/feedback', label: 'Feedback', icon: <MessageSquare className={ICON} /> },
   { href: '/admin/demo-requests', label: 'Demo requests', icon: <CalendarCheck className={ICON} /> },
+  { href: '/admin/demo-sessions', label: 'Demo sessions', icon: <Sparkles className={ICON} /> },
   { href: '/admin/tenants', label: 'Tenants', icon: <Building2 className={ICON} /> },
   { href: '/admin/users', label: 'Users', icon: <Users className={ICON} /> },
   { href: '/admin/plans', label: 'Plans & billing', icon: <Crown className={ICON} /> },
