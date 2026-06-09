@@ -179,6 +179,11 @@ export async function createDemoSession(): Promise<DemoSession> {
       away_team_id: schedAway.id,
       scheduled_at: futureScheduledAt,
       status: 'scheduled',
+      // Keep the column set identical to the live match above — Supabase
+      // bulk insert requires every row in the array to have the same keys,
+      // or the whole insert fails (silently here, which 404'd the demo).
+      // This match stays v1; locking its lineup later flips it to v2.
+      scoring_version: 1,
       home_score: 0,
       away_score: 0,
       current_half: 1,
