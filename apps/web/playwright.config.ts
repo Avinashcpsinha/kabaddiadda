@@ -6,6 +6,9 @@ loadEnv();
 
 export default defineConfig({
   testDir: './e2e',
+  // The demo flow has its own config (playwright.demo.config.ts) so it can
+  // also run against a deployed URL. Keep it out of the coaches run.
+  testIgnore: 'demo.spec.ts',
   globalSetup: './e2e/global-setup',
   timeout: 60_000,
   expect: { timeout: 15_000 },
