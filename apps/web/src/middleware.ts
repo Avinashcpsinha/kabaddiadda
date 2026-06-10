@@ -3,7 +3,7 @@ import { createServerClient } from '@supabase/ssr';
 import { updateSession } from '@/lib/supabase/middleware';
 import { getTenantFromRequest } from '@/lib/tenant';
 
-const PUBLIC_PATHS = ['/', '/login', '/signup', '/forgot-password', '/auth'];
+const PUBLIC_PATHS = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/auth'];
 const PROTECTED_PREFIXES = ['/feed', '/organiser', '/admin', '/settings'];
 
 // Module-scoped cache for custom-domain → tenant slug lookups. Edge runtime
