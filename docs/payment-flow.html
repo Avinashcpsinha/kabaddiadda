@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kabaddiadda · Razorpay Subscription Flow</title>
+<style>
+  :root {
+    --flame: #ff5a1f;
+    --flame-soft: #ff7a45;
+    --bg0: #05070a;
+    --bg1: #0d1527;
+    --card: #121a2b;
+    --card-line: rgba(255,255,255,0.08);
+    --text: #e8eaed;
+    --muted: #93a0b4;
+    --green: #22c55e;
+    --blue: #2da8ff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: radial-gradient(1200px 700px at 50% -10%, #14203a 0%, var(--bg1) 40%, var(--bg0) 100%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100%;
+    overflow: hidden;
+  }
+  .stage {
+    position: relative;
+    width: 1200px; height: 675px;
+    transform-origin: center center;
+  }
+  .titlebar {
+    position: absolute; top: 22px; left: 32px; right: 32px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--flame); box-shadow: 0 0 16px var(--flame);
+  }
+  .brand .kick { font-size: 11px; letter-spacing: 3px; color: var(--flame); font-weight: 800; }
+  .brand h1 { font-size: 19px; font-weight: 800; letter-spacing: .2px; }
+  .brand h1 span { color: var(--muted); font-weight: 600; }
+  .stepchip {
+    font-size: 12px; font-weight: 700; color: var(--muted);
+    border: 1px solid var(--card-line); border-radius: 999px; padding: 7px 14px;
+    background: rgba(255,255,255,0.03);
+  }
+  svg.wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .wire { fill: none; stroke: rgba(255,255,255,0.12); stroke-width: 2.5; }
+  .wire.lit { stroke: var(--flame); filter: drop-shadow(0 0 6px var(--flame)); transition: stroke .25s; }
+  .packet { fill: var(--flame); filter: drop-shadow(0 0 10px var(--flame)); }
+  .packet.tail { opacity: .35; }
+
+  .node {
+    position: absolute; width: 190px; min-height: 96px;
+    transform: translate(-50%, -50%);
+    background: linear-gradient(180deg, var(--card), #0e1623);
+    border: 1px solid var(--card-line); border-radius: 16px;
+    padding: 14px 16px; transition: border-color .3s, box-shadow .3s, transform .3s;
+  }
+  .node .ico { font-size: 22px; line-height: 1; margin-bottom: 8px; }
+  .node .t { font-size: 14px; font-weight: 800; letter-spacing: .2px; }
+  .node .s { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.35; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .node .tag {
+    position: absolute; top: -10px; left: 14px;
+    font-size: 9px; font-weight: 800; letter-spacing: 1.5px;
+    color: var(--bg0); background: var(--muted);
+    border-radius: 999px; padding: 3px 8px;
+  }
+  .node.active {
+    border-color: var(--flame);
+    box-shadow: 0 0 0 1px var(--flame), 0 10px 40px rgba(255,90,31,0.25);
+    transform: translate(-50%, -50%) scale(1.04);
+  }
+  .node.active .tag { background: var(--flame); }
+  .node.done { border-color: rgba(34,197,94,0.5); }
+  .node.done .tag { background: var(--green); }
+
+  .caption {
+    position: absolute; left: 32px; right: 32px; bottom: 26px;
+    background: rgba(8,12,20,0.72); border: 1px solid var(--card-line);
+    border-radius: 14px; padding: 16px 20px; backdrop-filter: blur(6px);
+    display: flex; align-items: center; gap: 16px; min-height: 70px;
+  }
+  .caption .num {
+    flex: none; width: 40px; height: 40px; border-radius: 12px;
+    background: var(--flame); color: #fff; font-weight: 900; font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 6px 20px rgba(255,90,31,0.4);
+  }
+  .caption .body .ct { font-size: 15px; font-weight: 700; }
+  .caption .body .cs { font-size: 12px; color: var(--muted); margin-top: 3px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  .controls {
+    margin-top: 18px; display: flex; gap: 10px; align-items: center;
+  }
+  .controls button {
+    background: var(--card); color: var(--text); border: 1px solid var(--card-line);
+    border-radius: 10px; padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  .controls button:hover { border-color: var(--flame); }
+  .controls .hint { font-size: 12px; color: var(--muted); margin-left: 8px; }
+</style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <div class="titlebar">
+      <div class="brand">
+        <div class="dot"></div>
+        <div>
+          <div class="kick">KABADDIADDA · BILLING</div>
+          <h1>Razorpay Subscription Flow <span>— Organiser upgrades to Pro</span></h1>
+        </div>
+      </div>
+      <div class="stepchip" id="stepchip">Step 1 / 7</div>
+    </div>
+
+    <svg class="wires" id="wires" viewBox="0 0 1200 675" preserveAspectRatio="none"></svg>
+
+    <!-- nodes injected by JS -->
+
+    <div class="caption">
+      <div class="num" id="capNum">1</div>
+      <div class="body">
+        <div class="ct" id="capTitle">—</div>
+        <div class="cs" id="capSub">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="playBtn">⏸ Pause</button>
+    <button id="restartBtn">↻ Restart</button>
+    <span class="hint">Tip: press <b>F11</b> for fullscreen, then screen-record this window to make your video.</span>
+  </div>
+
+<script>
+const NODES = [
+  { id:'org',  x:150, y:150, tag:'USER',      ico:'🧑‍💼', t:'Organiser',        s:'/organiser/billing' },
+  { id:'act',  x:470, y:150, tag:'SERVER',    ico:'⚙️',  t:'subscribeAction()', s:"plan: 'pro'" },
+  { id:'rzp',  x:800, y:150, tag:'RAZORPAY',  ico:'💳',  t:'Create subscription', s:'POST /v1/subscriptions' },
+  { id:'chk',  x:1060,y:340, tag:'CHECKOUT',  ico:'🔒',  t:'Hosted Checkout',  s:'Card · UPI · Netbanking' },
+  { id:'hook', x:740, y:540, tag:'WEBHOOK',   ico:'📡',  t:'Webhook receiver', s:'/api/billing/razorpay/webhook' },
+  { id:'db',   x:430, y:540, tag:'SUPABASE',  ico:'🗄️',  t:'Supabase',         s:'tenants · invoices' },
+  { id:'pro',  x:150, y:340, tag:'DONE',      ico:'🏆',  t:'Pro unlocked',     s:'plan = pro · active' },
+];
+
+const EDGES = [
+  ['org','act'], ['act','rzp'], ['rzp','chk'], ['chk','hook'], ['hook','db'], ['db','pro'],
+];
+
+const STEPS = [
+  { node:'org',  edge:null,        title:'Organiser clicks “Upgrade to Pro”',
+    sub:'on /organiser/billing — the Pro plan shows ₹4,999 / month' },
+  { node:'act',  edge:['org','act'], title:'subscribeAction() runs on the server',
+    sub:'checks the tenant has no active subscription, then builds the checkout' },
+  { node:'rzp',  edge:['act','rzp'], title:'createCheckoutSession → Razorpay API',
+    sub:'POST /v1/subscriptions · plan_T0RE… · saves subscription_id to tenants' },
+  { node:'chk',  edge:['rzp','chk'], title:'Customer pays on Razorpay hosted checkout',
+    sub:'short_url opens — Card / UPI / Netbanking; tenant still on free until confirmed' },
+  { node:'hook', edge:['chk','hook'], title:'Razorpay calls the webhook',
+    sub:'verify HMAC-SHA256 signature · dedupe via billing_events (idempotent)' },
+  { node:'db',   edge:['hook','db'], title:'Activate the tenant in Supabase',
+    sub:"subscription.activated/charged → plan='pro', plan_status='active', invoice upserted" },
+  { node:'pro',  edge:['db','pro'], title:'Tenant is now Pro 🎉',
+    sub:'feature gates unlock · organiser returns to /organiser/billing?subscribed=1' },
+];
+
+const stage = document.getElementById('stage');
+const wires = document.getElementById('wires');
+const nodeEls = {};
+
+// Build nodes
+for (const n of NODES) {
+  const el = document.createElement('div');
+  el.className = 'node'; el.id = 'node-' + n.id;
+  el.style.left = n.x + 'px'; el.style.top = n.y + 'px';
+  el.innerHTML = `<span class="tag">${n.tag}</span><div class="ico">${n.ico}</div><div class="t">${n.t}</div><div class="s">${n.s}</div>`;
+  stage.appendChild(el);
+  nodeEls[n.id] = el;
+}
+const N = id => NODES.find(n => n.id === id);
+
+// Build wires (curved)
+const wireEls = {};
+for (const [a,b] of EDGES) {
+  const na = N(a), nb = N(b);
+  const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+  const mx = (na.x + nb.x)/2, my = (na.y + nb.y)/2;
+  // gentle curve: offset control point perpendicular-ish
+  const d = `M ${na.x} ${na.y} Q ${mx} ${my} ${nb.x} ${nb.y}`;
+  path.setAttribute('d', d);
+  path.setAttribute('class','wire');
+  path.id = `wire-${a}-${b}`;
+  wires.appendChild(path);
+  wireEls[`${a}-${b}`] = path;
+}
+
+// Packet
+const packet = document.createElementNS('http://www.w3.org/2000/svg','circle');
+packet.setAttribute('r','7'); packet.setAttribute('class','packet'); packet.style.opacity = '0';
+wires.appendChild(packet);
+const tail = document.createElementNS('http://www.w3.org/2000/svg','circle');
+tail.setAttribute('r','5'); tail.setAttribute('class','packet tail'); tail.style.opacity = '0';
+wires.appendChild(tail);
+
+const stepchip = document.getElementById('stepchip');
+const capNum = document.getElementById('capNum');
+const capTitle = document.getElementById('capTitle');
+const capSub = document.getElementById('capSub');
+
+let stepIndex = 0;
+let phaseStart = null;
+let playing = true;
+let raf = null;
+const STEP_MS = 2400;     // hold per step
+const TRAVEL_MS = 1100;   // packet travel within step
+
+function setActive(i) {
+  NODES.forEach(n => {
+    const el = nodeEls[n.id];
+    el.classList.remove('active');
+  });
+  // mark done for all nodes up to current
+  for (let k = 0; k <= i; k++) {
+    const id = STEPS[k].node;
+    nodeEls[id].classList.toggle('done', k < i);
+  }
+  nodeEls[STEPS[i].node].classList.add('active');
+  nodeEls[STEPS[i].node].classList.remove('done');
+
+  // lit wire
+  Object.values(wireEls).forEach(w => w.classList.remove('lit'));
+  const e = STEPS[i].edge;
+  if (e) wireEls[`${e[0]}-${e[1]}`].classList.add('lit');
+
+  stepchip.textContent = `Step ${i+1} / ${STEPS.length}`;
+  capNum.textContent = i+1;
+  capTitle.textContent = STEPS[i].title;
+  capSub.textContent = STEPS[i].sub;
+}
+
+function pointOnWire(edge, t) {
+  const w = wireEls[`${edge[0]}-${edge[1]}`];
+  const len = w.getTotalLength();
+  return w.getPointAtLength(len * t);
+}
+
+function frame(ts) {
+  if (!playing) return;
+  if (phaseStart == null) phaseStart = ts;
+  const elapsed = ts - phaseStart;
+  const e = STEPS[stepIndex].edge;
+
+  if (e) {
+    const t = Math.min(1, elapsed / TRAVEL_MS);
+    const ease = t < .5 ? 2*t*t : 1 - Math.pow(-2*t+2,2)/2;
+    const p = pointOnWire(e, ease);
+    packet.setAttribute('cx', p.x); packet.setAttribute('cy', p.y); packet.style.opacity = t<1?'1':'0';
+    const pt = pointOnWire(e, Math.max(0, ease-0.05));
+    tail.setAttribute('cx', pt.x); tail.setAttribute('cy', pt.y); tail.style.opacity = t<1?'1':'0';
+  } else {
+    packet.style.opacity = '0'; tail.style.opacity = '0';
+  }
+
+  if (elapsed >= STEP_MS) {
+    stepIndex = (stepIndex + 1) % STEPS.length;
+    phaseStart = ts;
+    if (stepIndex === 0) {
+      // reset done states on loop
+      NODES.forEach(n => nodeEls[n.id].classList.remove('done'));
+    }
+    setActive(stepIndex);
+  }
+  raf = requestAnimationFrame(frame);
+}
+
+function start() { playing = true; phaseStart = null; setActive(stepIndex); raf = requestAnimationFrame(frame); }
+function stop() { playing = false; if (raf) cancelAnimationFrame(raf); }
+
+document.getElementById('playBtn').addEventListener('click', (ev) => {
+  if (playing) { stop(); ev.target.textContent = '▶ Play'; }
+  else { ev.target.textContent = '⏸ Pause'; start(); }
+});
+document.getElementById('restartBtn').addEventListener('click', () => {
+  stop(); stepIndex = 0; NODES.forEach(n => nodeEls[n.id].classList.remove('done'));
+  document.getElementById('playBtn').textContent = '⏸ Pause'; start();
+});
+
+// Fit stage to viewport
+function fit() {
+  const pad = 40;
+  const sx = (window.innerWidth - pad) / 1200;
+  const sy = (window.innerHeight - 120) / 675;
+  const s = Math.min(sx, sy, 1.2);
+  stage.style.transform = `scale(${s})`;
+}
+window.addEventListener('resize', fit);
+fit();
+setActive(0);
+start();
+</script>
+</body>
+</html>

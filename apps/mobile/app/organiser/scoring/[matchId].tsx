@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../../src/lib/supabase';
 import { useSession } from '../../../src/lib/use-session';
 import { theme } from '../../../src/theme';
@@ -69,15 +70,6 @@ const EVENT_LABEL: Record<string, string> = {
 
 const HALF_SECONDS = 20 * 60;
 
-// Mobile scoring console — wired to real Supabase.
-//
-// Local clock: ticks every second client-side and persists every 5s back to
-// matches.clock_seconds / current_half. The DB triggers
-// (apply_match_event_score + trg_maintain_player_state) update score and
-// player state when a match_events row is inserted.
-//
-// Realtime: postgres_changes subscription to matches (UPDATE) keeps the
-// score / clock / status fresh if a co-scorer is also editing.
 export default function MobileScoringScreen() {
   const router = useRouter();
   const { matchId } = useLocalSearchParams<{ matchId: string }>();
@@ -95,8 +87,7 @@ export default function MobileScoringScreen() {
   const [defenderIds, setDefenderIds] = useState<Set<string>>(new Set());
   const [busyEvent, setBusyEvent] = useState(false);
 
-  // Local running clock — this is what the operator sees tick. Persists to
-  // the DB every 5 seconds so a refresh resumes near where it left off.
+  // Local running clock
   const [localClock, setLocalClock] = useState(0);
   const [running, setRunning] = useState(false);
   const lastPersistRef = useRef(0);
@@ -124,8 +115,6 @@ export default function MobileScoringScreen() {
       .maybeSingle();
     if (!data) return;
     setMatch(data as unknown as MatchRow);
-    // Sync the local clock from DB only when the match changes by more than 1s
-    // since our last write — otherwise we fight the local timer.
     const dbClock = (data as unknown as MatchRow).clock_seconds;
     if (Math.abs(dbClock - lastSyncedClockRef.current) > 1) {
       setLocalClock(dbClock);
@@ -135,7 +124,6 @@ export default function MobileScoringScreen() {
 
   const loadPlayers = useCallback(async () => {
     if (!mId) return;
-    // Get rosters for both teams via match.home_team_id/away_team_id.
     const { data: m } = await supabase
       .from('matches')
       .select('home_team_id, away_team_id')
@@ -168,7 +156,7 @@ export default function MobileScoringScreen() {
     Promise.all([loadMatch(), loadPlayers(), loadEvents()]).then(() => setLoaded(true));
   }, [mId, loadMatch, loadPlayers, loadEvents]);
 
-  // Realtime — keep score / state in sync if a co-scorer is also editing.
+  // Realtime
   useEffect(() => {
     if (!mId) return;
     const channel = supabase
@@ -192,7 +180,7 @@ export default function MobileScoringScreen() {
     };
   }, [mId, loadMatch, loadEvents]);
 
-  // Local clock tick. Only ticks when running=true. Persists every 5s.
+  // Clock tick
   useEffect(() => {
     if (!running) return;
     const t = setInterval(() => {
@@ -215,7 +203,6 @@ export default function MobileScoringScreen() {
     return () => clearInterval(t);
   }, [running, mId, match]);
 
-  // Helper: pick a player as the raider. The raider's team is the attacking team.
   function pickRaider(player: PlayerLite) {
     if (!match) return;
     setRaiderId(player.id);
@@ -228,7 +215,7 @@ export default function MobileScoringScreen() {
       Alert.alert('Pick raider first', 'Tap a raider before choosing defenders.');
       return;
     }
-    if (player.team_id === attackingTeamId) return; // same-team players can't defend
+    if (player.team_id === attackingTeamId) return;
     setDefenderIds((prev) => {
       const next = new Set(prev);
       if (next.has(player.id)) next.delete(player.id);
@@ -250,8 +237,6 @@ export default function MobileScoringScreen() {
     setRunning(true);
   }
 
-  // Submit a raid action. Type encodes which side gained — raid_point /
-  // tackle_point / bonus_point / empty_raid. The DB trigger updates score.
   async function logEvent(
     type: 'raid_point' | 'tackle_point' | 'bonus_point' | 'empty_raid' | 'time_out',
     pointsAttacker: number,
@@ -288,8 +273,6 @@ export default function MobileScoringScreen() {
     const { error } = await supabase.from('match_events').insert(payload);
 
     if (!error) {
-      // Clear the in-progress raider on the match row so refreshes see no
-      // dangling raid banner. Same as the web action's post-event update.
       await supabase
         .from('matches')
         .update({
@@ -365,148 +348,193 @@ export default function MobileScoringScreen() {
   const isLive = match.status === 'live';
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.wrap}>
-      <Stack.Screen options={{ title: 'Live scoring' }} />
-
-      {/* SCOREBOARD */}
-      <View style={styles.scoreboard}>
-        <View style={styles.scoreRow}>
-          <ScoreSide team={home} score={match.home_score} />
-          <View style={styles.scoreCenter}>
-            <Text style={styles.halfLabel}>Q{match.current_half}</Text>
-            <Text style={styles.clockText}>{formatClock(localClock)}</Text>
-            <Text style={[styles.statusLine, { color: isLive ? theme.colors.danger : theme.colors.textMuted }]}>
-              {isLive ? '● LIVE' : match.status.toUpperCase()}
-            </Text>
-          </View>
-          <ScoreSide team={away} score={match.away_score} />
-        </View>
-
-        {/* CLOCK CONTROLS */}
-        <View style={styles.clockControls}>
-          <Pressable
-            style={[styles.clockBtn, running && styles.clockBtnRed]}
-            onPress={() => {
-              if (!running) startMatchIfNeeded();
-              setRunning((r) => !r);
-            }}
-          >
-            <Text style={styles.clockBtnText}>{running ? '⏸ Pause' : '▶ Start'}</Text>
-          </Pressable>
-          <Pressable style={styles.clockBtnGhost} onPress={toggleHalf}>
-            <Text style={styles.clockBtnGhostText}>Next half →</Text>
-          </Pressable>
-          <Pressable style={styles.clockBtnGhost} onPress={endMatch}>
-            <Text style={[styles.clockBtnGhostText, { color: theme.colors.danger }]}>End match</Text>
-          </Pressable>
-        </View>
-      </View>
-
-      {/* RAID PANEL */}
-      <View style={styles.raidPanel}>
-        <Text style={styles.raidPanelTitle}>
-          {raiderPlayer
-            ? `Raider: ${raiderPlayer.full_name}${raiderPlayer.jersey_number != null ? ` #${raiderPlayer.jersey_number}` : ''}  →  ${attackerName ?? ''}`
-            : 'Pick a raider'}
-        </Text>
-        {defenderIds.size > 0 && (
-          <Text style={styles.raidPanelSub}>
-            {defenderIds.size} defender{defenderIds.size === 1 ? '' : 's'} touched
-          </Text>
-        )}
-        {(raiderPlayer || defenderIds.size > 0) && (
-          <Pressable hitSlop={8} onPress={clearRaid}>
-            <Text style={styles.clearLink}>Clear ×</Text>
-          </Pressable>
-        )}
-      </View>
-
-      {/* PLAYER PICKERS */}
-      <View style={styles.pickersRow}>
-        <PlayerColumn
-          team={home}
-          players={homePlayers}
-          raiderId={raiderId}
-          defenderIds={defenderIds}
-          onPickRaider={pickRaider}
-          onToggleDefender={toggleDefender}
+    <View style={{ flex: 1, backgroundColor: '#05070a' }}>
+      {/* Stadium Night Glow Backdrop */}
+      <View style={StyleSheet.absoluteFillObject}>
+        <LinearGradient
+          colors={['#0d1527', '#06080e', '#030407']}
+          style={StyleSheet.absoluteFillObject}
+          locations={[0, 0.45, 1]}
         />
-        <PlayerColumn
-          team={away}
-          players={awayPlayers}
-          raiderId={raiderId}
-          defenderIds={defenderIds}
-          onPickRaider={pickRaider}
-          onToggleDefender={toggleDefender}
+        <LinearGradient
+          colors={[theme.colors.primary + '10', 'transparent']}
+          style={styles.radialGlow}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
         />
       </View>
 
-      {/* ACTION GRID */}
-      <Text style={styles.sectionKicker}>LOG ACTION</Text>
-      <View style={styles.actionGrid}>
-        <ActionButton
-          label="Touch +1"
-          sub="Raider touched defender(s)"
-          color={theme.colors.success}
-          disabled={busyEvent || !raiderId || defenderIds.size === 0}
-          onPress={() => logEvent('raid_point', 1 + (defenderIds.size > 1 ? defenderIds.size - 1 : 0), 0)}
-        />
-        <ActionButton
-          label="Bonus +1"
-          sub="Raider crossed bonus line"
-          color={theme.colors.primary}
-          disabled={busyEvent || !raiderId}
-          onPress={() => logEvent('bonus_point', 1, 0)}
-        />
-        <ActionButton
-          label="Tackle +1"
-          sub="Defenders stopped raider"
-          color="#0ea5e9"
-          disabled={busyEvent || !raiderId}
-          onPress={() => logEvent('tackle_point', 0, 1)}
-        />
-        <ActionButton
-          label="Empty raid"
-          sub="No points either way"
-          color={theme.colors.textMuted}
-          disabled={busyEvent || !raiderId}
-          onPress={() => logEvent('empty_raid', 0, 0)}
-        />
-        <ActionButton
-          label="Time out"
-          sub="Pause the clock"
-          color={theme.colors.danger}
-          disabled={busyEvent}
-          onPress={() => {
-            setRunning(false);
-            logEvent('time_out', 0, 0);
-          }}
-        />
-      </View>
+      <Stack.Screen options={{ title: 'Live Match Console' }} />
 
-      {/* RECENT EVENTS */}
-      <Text style={styles.sectionKicker}>RECENT EVENTS</Text>
-      {events.length === 0 ? (
-        <Text style={styles.empty}>No events logged yet.</Text>
-      ) : (
-        <View style={styles.eventsList}>
-          {events.map((ev) => (
-            <View key={ev.id} style={styles.eventRow}>
-              <Text style={styles.eventLabel}>
-                {EVENT_LABEL[ev.type] ?? ev.type}
-              </Text>
-              <Text style={styles.eventClock}>
-                Q{ev.half} · {formatClock(ev.clock_seconds)}
-              </Text>
-              <Text style={styles.eventPoints}>
-                {ev.points_attacker > 0 ? `+${ev.points_attacker} attack` : ''}
-                {ev.points_defender > 0 ? `+${ev.points_defender} defend` : ''}
-              </Text>
+      <ScrollView style={styles.screen} contentContainerStyle={styles.wrap} showsVerticalScrollIndicator={false}>
+        {/* TV BROADCAST SCOREBOARD */}
+        <View style={styles.scoreboard}>
+          <LinearGradient
+            colors={['#171f30', '#101623']}
+            style={StyleSheet.absoluteFillObject}
+          />
+          <View style={styles.scoreRow}>
+            <ScoreSide team={home} score={match.home_score} />
+            <View style={styles.scoreCenter}>
+              <View style={styles.periodBadge}>
+                <Text style={styles.halfLabel}>Q{match.current_half}</Text>
+              </View>
+              <Text style={styles.clockText}>{formatClock(localClock)}</Text>
+              <View style={[styles.liveStatusIndicator, isLive && styles.liveStatusPulse]}>
+                <Text style={[styles.statusLine, { color: isLive ? theme.colors.danger : theme.colors.textMuted }]}>
+                  {isLive ? '● LIVE' : match.status.toUpperCase()}
+                </Text>
+              </View>
             </View>
-          ))}
+            <ScoreSide team={away} score={match.away_score} />
+          </View>
+
+          {/* CLOCK CONTROLS */}
+          <View style={styles.clockControls}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.clockBtn,
+                running && styles.clockBtnRed,
+                pressed && styles.btnPressed,
+              ]}
+              onPress={() => {
+                if (!running) startMatchIfNeeded();
+                setRunning((r) => !r);
+              }}
+            >
+              <Text style={styles.clockBtnText}>{running ? '⏸ Pause' : '▶ Start'}</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.clockBtnGhost, pressed && styles.btnPressed]}
+              onPress={toggleHalf}
+            >
+              <Text style={styles.clockBtnGhostText}>Next half →</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.clockBtnGhost, pressed && styles.btnPressed]}
+              onPress={endMatch}
+            >
+              <Text style={[styles.clockBtnGhostText, { color: theme.colors.danger }]}>End match</Text>
+            </Pressable>
+          </View>
         </View>
-      )}
-    </ScrollView>
+
+        {/* RAID PANEL */}
+        <View style={styles.raidPanel}>
+          <LinearGradient
+            colors={['rgba(255, 92, 26, 0.08)', 'transparent']}
+            style={StyleSheet.absoluteFillObject}
+          />
+          <View style={styles.raidPanelHeader}>
+            <Text style={styles.raidPanelTitle}>
+              {raiderPlayer
+                ? `Raider: ${raiderPlayer.full_name}${raiderPlayer.jersey_number != null ? ` #${raiderPlayer.jersey_number}` : ''}  →  ${attackerName ?? ''}`
+                : 'Pick a raider'}
+            </Text>
+            {(raiderPlayer || defenderIds.size > 0) && (
+              <Pressable hitSlop={8} onPress={clearRaid}>
+                <Text style={styles.clearLink}>Clear ×</Text>
+              </Pressable>
+            )}
+          </View>
+          {defenderIds.size > 0 ? (
+            <Text style={styles.raidPanelSub}>
+              {defenderIds.size} defender{defenderIds.size === 1 ? '' : 's'} touched (Long-press roster card to select)
+            </Text>
+          ) : (
+            <Text style={styles.raidPanelHint}>
+              Tap player roster card to set Raider. Long-press opponent roster card to select touched defenders.
+            </Text>
+          )}
+        </View>
+
+        {/* PLAYER PICKERS */}
+        <View style={styles.pickersRow}>
+          <PlayerColumn
+            team={home}
+            players={homePlayers}
+            raiderId={raiderId}
+            defenderIds={defenderIds}
+            onPickRaider={pickRaider}
+            onToggleDefender={toggleDefender}
+          />
+          <PlayerColumn
+            team={away}
+            players={awayPlayers}
+            raiderId={raiderId}
+            defenderIds={defenderIds}
+            onPickRaider={pickRaider}
+            onToggleDefender={toggleDefender}
+          />
+        </View>
+
+        {/* ACTION GRID */}
+        <Text style={styles.sectionKicker}>LOG ACTION</Text>
+        <View style={styles.actionGrid}>
+          <ActionButton
+            label="Touch +1"
+            sub="Raider touched defender(s)"
+            color={theme.colors.success}
+            disabled={busyEvent || !raiderId || defenderIds.size === 0}
+            onPress={() => logEvent('raid_point', 1 + (defenderIds.size > 1 ? defenderIds.size - 1 : 0), 0)}
+          />
+          <ActionButton
+            label="Bonus +1"
+            sub="Raider crossed bonus line"
+            color={theme.colors.primary}
+            disabled={busyEvent || !raiderId}
+            onPress={() => logEvent('bonus_point', 1, 0)}
+          />
+          <ActionButton
+            label="Tackle +1"
+            sub="Defenders stopped raider"
+            color="#0ea5e9"
+            disabled={busyEvent || !raiderId}
+            onPress={() => logEvent('tackle_point', 0, 1)}
+          />
+          <ActionButton
+            label="Empty raid"
+            sub="No points either way"
+            color={theme.colors.textMuted}
+            disabled={busyEvent || !raiderId}
+            onPress={() => logEvent('empty_raid', 0, 0)}
+          />
+          <ActionButton
+            label="Time out"
+            sub="Pause the clock"
+            color={theme.colors.danger}
+            disabled={busyEvent}
+            onPress={() => {
+              setRunning(false);
+              logEvent('time_out', 0, 0);
+            }}
+          />
+        </View>
+
+        {/* RECENT EVENTS */}
+        <Text style={styles.sectionKicker}>RECENT EVENTS</Text>
+        {events.length === 0 ? (
+          <Text style={styles.empty}>No events logged yet.</Text>
+        ) : (
+          <View style={styles.eventsList}>
+            {events.map((ev) => (
+              <View key={ev.id} style={styles.eventRow}>
+                <Text style={styles.eventLabel}>
+                  {EVENT_LABEL[ev.type] ?? ev.type}
+                </Text>
+                <Text style={styles.eventClock}>
+                  Q{ev.half} · {formatClock(ev.clock_seconds)}
+                </Text>
+                <Text style={styles.eventPoints}>
+                  {ev.points_attacker > 0 ? `+${ev.points_attacker} attack ` : ''}
+                  {ev.points_defender > 0 ? `+${ev.points_defender} defend` : ''}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -554,10 +582,11 @@ function PlayerColumn({
                 key={p.id}
                 onPress={() => (isRaider ? onPickRaider(p) : isDefender ? onToggleDefender(p) : null)}
                 onLongPress={() => onToggleDefender(p)}
-                style={[
+                style={({ pressed }) => [
                   styles.playerChip,
                   isRaider && styles.playerChipRaider,
                   isDefender && styles.playerChipDefender,
+                  pressed && styles.chipPressed,
                 ]}
               >
                 <Text style={[styles.playerChipNumber, (isRaider || isDefender) && styles.playerChipTextActive]}>
@@ -569,13 +598,14 @@ function PlayerColumn({
                 >
                   {p.full_name.split(' ')[0]}
                 </Text>
-                {/* Tap to set as raider, long-press to mark as touched defender. */}
                 <Pressable
                   hitSlop={6}
                   style={styles.playerChipPickWrap}
                   onPress={() => onPickRaider(p)}
                 >
-                  <Text style={styles.playerChipPick}>{isRaider ? '★' : '○'}</Text>
+                  <Text style={[styles.playerChipPick, (isRaider || isDefender) && styles.playerChipTextActive]}>
+                    {isRaider ? '★' : '○'}
+                  </Text>
                 </Pressable>
               </Pressable>
             );
@@ -603,7 +633,12 @@ function ActionButton({
     <Pressable
       onPress={onPress}
       disabled={disabled}
-      style={[styles.actionBtn, { borderColor: disabled ? theme.colors.border : color + '99' }, disabled && styles.actionBtnDisabled]}
+      style={({ pressed }) => [
+        styles.actionBtn,
+        { borderColor: disabled ? 'rgba(255,255,255,0.06)' : color + '77' },
+        disabled && styles.actionBtnDisabled,
+        !disabled && pressed && styles.btnPressed,
+      ]}
     >
       <Text style={[styles.actionBtnLabel, { color: disabled ? theme.colors.textMuted : color }]}>{label}</Text>
       <Text style={styles.actionBtnSub}>{sub}</Text>
@@ -612,61 +647,94 @@ function ActionButton({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: theme.colors.bg },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.bg, padding: theme.spacing.lg },
+  radialGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 280,
+  },
+  screen: { flex: 1 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#05070a', padding: theme.spacing.lg },
   wrap: { padding: theme.spacing.lg, gap: theme.spacing.md, paddingBottom: theme.spacing.xxl + 24 },
 
   notFound: { color: theme.colors.textMuted, fontSize: theme.font.body },
 
   scoreboard: {
-    backgroundColor: theme.colors.bgElevated,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    backgroundColor: '#111622',
+    borderWidth: 1.2,
+    borderColor: 'rgba(255,255,255,0.06)',
     borderRadius: theme.radius.lg,
     padding: theme.spacing.md,
     gap: theme.spacing.md,
+    overflow: 'hidden',
   },
   scoreRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   scoreSide: { flex: 1, alignItems: 'center', gap: 4 },
-  scoreSideBadge: { width: 40, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  scoreSideBadgeText: { color: '#fff', fontSize: 11, fontWeight: '900' },
-  scoreSideName: { color: theme.colors.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.5, textAlign: 'center', maxWidth: 110 },
-  scoreSideValue: { color: theme.colors.text, fontSize: 44, fontWeight: '900', letterSpacing: -1, marginTop: 2 },
+  scoreSideBadge: { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 5, elevation: 4 },
+  scoreSideBadgeText: { color: '#fff', fontSize: 13, fontWeight: '900' },
+  scoreSideName: { color: theme.colors.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.5, textAlign: 'center', maxWidth: 110, marginTop: 4 },
+  scoreSideValue: { color: theme.colors.text, fontSize: 44, fontWeight: '900', letterSpacing: -1, marginTop: 2, fontVariant: ['tabular-nums'] },
   scoreCenter: { alignItems: 'center', gap: 2, paddingHorizontal: theme.spacing.sm },
+  periodBadge: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginBottom: 4,
+  },
   halfLabel: { color: theme.colors.text, fontSize: 11, fontWeight: '900', letterSpacing: 0.8 },
-  clockText: { color: theme.colors.text, fontSize: 22, fontWeight: '900' },
+  clockText: { color: theme.colors.text, fontSize: 24, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  liveStatusIndicator: {
+    marginTop: 4,
+  },
+  liveStatusPulse: {
+    opacity: 0.8,
+  },
   statusLine: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
 
-  clockControls: { flexDirection: 'row', gap: 6, paddingTop: theme.spacing.sm, borderTopWidth: 1, borderTopColor: theme.colors.border },
-  clockBtn: { flex: 1, backgroundColor: theme.colors.success, paddingVertical: 8, borderRadius: theme.radius.md, alignItems: 'center' },
+  clockControls: { flexDirection: 'row', gap: 6, paddingTop: theme.spacing.sm, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' },
+  clockBtn: { flex: 1, backgroundColor: theme.colors.success, paddingVertical: 10, borderRadius: theme.radius.md, alignItems: 'center' },
   clockBtnRed: { backgroundColor: theme.colors.danger },
-  clockBtnText: { color: '#fff', fontSize: 11, fontWeight: '800' },
-  clockBtnGhost: { flex: 1, paddingVertical: 8, borderRadius: theme.radius.md, alignItems: 'center', borderWidth: 1, borderColor: theme.colors.border },
-  clockBtnGhostText: { color: theme.colors.text, fontSize: 11, fontWeight: '700' },
+  clockBtnText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  clockBtnGhost: { flex: 1, paddingVertical: 10, borderRadius: theme.radius.md, alignItems: 'center', borderWidth: 1.2, borderColor: 'rgba(255,255,255,0.1)' },
+  clockBtnGhostText: { color: theme.colors.text, fontSize: 12, fontWeight: '700' },
+
+  btnPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.97 }],
+  },
 
   raidPanel: {
-    backgroundColor: theme.colors.bgElevated,
-    borderWidth: 1,
-    borderColor: theme.colors.primary + '55',
+    backgroundColor: '#111622',
+    borderWidth: 1.2,
+    borderColor: theme.colors.primary + '33',
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
     gap: 4,
+    overflow: 'hidden',
   },
-  raidPanelTitle: { color: theme.colors.primary, fontSize: theme.font.small, fontWeight: '800' },
-  raidPanelSub: { color: theme.colors.textMuted, fontSize: 11 },
-  clearLink: { color: theme.colors.danger, fontSize: 11, fontWeight: '800', marginTop: 4 },
+  raidPanelHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  raidPanelTitle: { color: theme.colors.primary, fontSize: 13, fontWeight: '900' },
+  raidPanelSub: { color: theme.colors.textMuted, fontSize: 11, fontWeight: '600' },
+  raidPanelHint: { color: theme.colors.textMuted, fontSize: 10, lineHeight: 14, fontWeight: '600' },
+  clearLink: { color: theme.colors.danger, fontSize: 11, fontWeight: '900' },
 
   pickersRow: { flexDirection: 'row', gap: theme.spacing.sm },
   playerColumn: { flex: 1, gap: 6 },
-  playerColumnTitle: { color: theme.colors.text, fontSize: 11, fontWeight: '800', letterSpacing: 0.8, textAlign: 'center' },
+  playerColumnTitle: { color: theme.colors.text, fontSize: 11, fontWeight: '800', letterSpacing: 0.8, textAlign: 'center', marginBottom: 2 },
   playerList: { gap: 4 },
   playerChip: {
-    backgroundColor: theme.colors.bgElevated,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    backgroundColor: '#111622',
+    borderWidth: 1.2,
+    borderColor: 'rgba(255,255,255,0.06)',
     borderRadius: theme.radius.md,
     paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 8,
+    paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -674,41 +742,46 @@ const styles = StyleSheet.create({
   playerChipRaider: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
   playerChipDefender: { backgroundColor: '#0ea5e9', borderColor: '#0ea5e9' },
   playerChipNumber: { color: theme.colors.textMuted, fontSize: 10, fontWeight: '900', minWidth: 22 },
-  playerChipName: { color: theme.colors.text, fontSize: 11, fontWeight: '700', flex: 1 },
-  playerChipTextActive: { color: '#fff', fontWeight: '800' },
+  playerChipName: { color: theme.colors.text, fontSize: 12, fontWeight: '800', flex: 1 },
+  playerChipTextActive: { color: '#fff', fontWeight: '900' },
   playerChipPickWrap: { paddingHorizontal: 4 },
   playerChipPick: { color: theme.colors.textMuted, fontSize: 14, fontWeight: '900' },
+  chipPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
   emptyMini: { color: theme.colors.textMuted, fontSize: 11, fontStyle: 'italic', textAlign: 'center', paddingVertical: 8 },
 
-  sectionKicker: { color: theme.colors.textMuted, fontSize: 11, fontWeight: '800', letterSpacing: 1.5, marginTop: theme.spacing.md },
+  sectionKicker: { color: theme.colors.primary, fontSize: 11, fontWeight: '800', letterSpacing: 1.5, marginTop: theme.spacing.md },
 
   actionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   actionBtn: {
     flexBasis: '48%',
     flexGrow: 1,
-    backgroundColor: theme.colors.bgElevated,
-    borderWidth: 1,
+    backgroundColor: '#111622',
+    borderWidth: 1.2,
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
     gap: 2,
   },
-  actionBtnDisabled: { backgroundColor: theme.colors.bgElevated, opacity: 0.5 },
-  actionBtnLabel: { fontSize: theme.font.body, fontWeight: '900' },
-  actionBtnSub: { color: theme.colors.textMuted, fontSize: 11 },
+  actionBtnDisabled: { backgroundColor: '#111622', opacity: 0.4 },
+  actionBtnLabel: { fontSize: 14, fontWeight: '900' },
+  actionBtnSub: { color: theme.colors.textMuted, fontSize: 11, fontWeight: '600' },
 
   empty: { color: theme.colors.textMuted, fontSize: theme.font.small, fontStyle: 'italic' },
   eventsList: { gap: 4 },
   eventRow: {
-    backgroundColor: theme.colors.bgElevated,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    backgroundColor: '#111622',
+    borderWidth: 1.2,
+    borderColor: 'rgba(255,255,255,0.06)',
     borderRadius: theme.radius.md,
     padding: theme.spacing.sm,
     flexDirection: 'row',
     gap: theme.spacing.sm,
     alignItems: 'center',
   },
-  eventLabel: { color: theme.colors.text, fontSize: theme.font.small, fontWeight: '800', flex: 1 },
+  eventLabel: { color: theme.colors.text, fontSize: 12, fontWeight: '800', flex: 1 },
   eventClock: { color: theme.colors.textMuted, fontSize: 10, fontWeight: '700' },
-  eventPoints: { color: theme.colors.primary, fontSize: 10, fontWeight: '800' },
+  eventPoints: { color: theme.colors.primary, fontSize: 10, fontWeight: '800', fontVariant: ['tabular-nums'] },
 });
+

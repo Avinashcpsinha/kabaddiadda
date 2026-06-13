@@ -1,0 +1,5 @@
+# Generated tour artifacts (the finished video lives in /docs)
+output/
+audio/
+offsets.json
+durations.json

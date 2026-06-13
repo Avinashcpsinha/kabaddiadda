@@ -44,3 +44,12 @@ next-env.d.ts
 # misc
 .cache/
 coverage/
+
+.vercel
+
+# large media — keep video binaries out of git (regenerate via e2e/tour tooling)
+*.mp4
+*.webm
+
+# claude runtime
+.claude/scheduled_tasks.lock

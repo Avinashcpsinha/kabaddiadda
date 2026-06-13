@@ -80,7 +80,11 @@ export default function HomeScreen() {
         <View style={styles.heroContent}>
           <View style={styles.logoBlock}>
             <View style={styles.logoBadge}>
-              <Text style={styles.logoBadgeText}>K</Text>
+              <Image
+                source={require('../assets/logo.png')}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
             <Text style={styles.wordmark}>KABADDIADDA</Text>
             <View style={styles.liveDot}>
@@ -227,17 +231,13 @@ const styles = StyleSheet.create({
   logoBadge: {
     width: 56,
     height: 56,
-    borderRadius: 16,
-    backgroundColor: theme.colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: theme.colors.primary,
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 10,
   },
-  logoBadgeText: { color: '#fff', fontSize: 28, fontWeight: '900' },
+  logoImage: {
+    width: '100%',
+    height: '100%',
+  },
   wordmark: {
     color: theme.colors.text,
     fontSize: theme.font.body,

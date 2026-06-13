@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { getSessionUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { BroadcastOverlayHelp } from '../broadcast-overlay-help';
+import { NormalScoringConsole } from './normal-scoring-console';
 import { ScoringConsole } from './scoring-console';
 import { ScoringTutorial } from './scoring-tutorial';
 
@@ -20,7 +21,7 @@ export default async function ScoringPage({
   const { data: match } = await supabase
     .from('matches')
     .select(
-      'id, scheduled_at, status, round, home_score, away_score, current_half, clock_seconds, half_seconds, current_raider_id, current_attacking_team_id, raid_seconds_left, home_dod_counter, away_dod_counter, home_reviews_used, away_reviews_used, home_timeouts_used, away_timeouts_used, home_team:home_team_id(id, name, short_name, primary_color), away_team:away_team_id(id, name, short_name, primary_color)',
+      'id, scoring_version, scheduled_at, status, round, home_score, away_score, current_half, clock_seconds, half_seconds, current_raider_id, current_attacking_team_id, raid_seconds_left, home_dod_counter, away_dod_counter, home_reviews_used, away_reviews_used, home_timeouts_used, away_timeouts_used, home_team:home_team_id(id, name, short_name, primary_color), away_team:away_team_id(id, name, short_name, primary_color)',
     )
     .eq('id', matchId)
     .eq('tenant_id', user!.tenantId!)
@@ -36,6 +37,68 @@ export default async function ScoringPage({
     .eq('match_id', matchId)
     .order('created_at', { ascending: false })
     .limit(30);
+
+  // @ts-expect-error supabase nested join
+  const homeTeam = match.home_team as { id: string; name: string; short_name: string | null; primary_color: string | null };
+  // @ts-expect-error supabase nested join
+  const awayTeam = match.away_team as { id: string; name: string; short_name: string | null; primary_color: string | null };
+
+  // ── Normal (v1) scoring ──────────────────────────────────────────────
+  // No lineups / out / revival engine — just a simple tap-to-score console.
+  // The v2 player-state work below is skipped entirely.
+  if (match.scoring_version !== 2) {
+    const normalEvents = (events ?? []).map((e) => ({
+      id: e.id,
+      type: e.type,
+      points_attacker: e.points_attacker,
+      points_defender: e.points_defender,
+      attacking_team_id: e.attacking_team_id,
+      half: e.half,
+      clock_seconds: e.clock_seconds,
+    }));
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Link
+            href={`/organiser/tournaments/${id}/matches/${matchId}`}
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-3 w-3" />
+            Match details
+          </Link>
+          <div className="flex items-center gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/overlay/match/${matchId}`} target="_blank">
+                <Tv className="h-3 w-3" />
+                Broadcast overlay
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/live/${matchId}`} target="_blank">
+                <ExternalLink className="h-3 w-3" />
+                Public live page
+              </Link>
+            </Button>
+          </div>
+        </div>
+        <NormalScoringConsole
+          matchId={matchId}
+          tournamentId={id}
+          initial={{
+            status: match.status,
+            homeScore: match.home_score,
+            awayScore: match.away_score,
+            currentHalf: match.current_half,
+            clockSeconds: match.clock_seconds,
+            halfSeconds: match.half_seconds ?? 1800,
+            home: homeTeam,
+            away: awayTeam,
+          }}
+          recentEvents={normalEvents}
+        />
+      </div>
+    );
+  }
 
   const [lineupsRes, statesRes] = await Promise.all([
     supabase

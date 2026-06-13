@@ -8,6 +8,7 @@ import { getSessionUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { initials } from '@/lib/utils';
 import { BroadcastOverlayHelp } from './broadcast-overlay-help';
+import { QuickStartNormal } from './quick-start-normal';
 
 const EVENT_LABEL: Record<string, string> = {
   raid_point: 'Raid',
@@ -94,12 +95,15 @@ export default async function MatchDetailPage({
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
             {match.status === 'scheduled' ? (
-              <Button asChild variant="flame" size="lg">
-                <Link href={`/organiser/tournaments/${id}/matches/${matchId}/lineups`}>
-                  <Users className="h-4 w-4" />
-                  Set lineups & start
-                </Link>
-              </Button>
+              <>
+                <QuickStartNormal tournamentId={id} matchId={matchId} />
+                <Button asChild variant="outline" size="lg">
+                  <Link href={`/organiser/tournaments/${id}/matches/${matchId}/lineups`}>
+                    <Users className="h-4 w-4" />
+                    Set lineups & start (Advanced)
+                  </Link>
+                </Button>
+              </>
             ) : (
               <Button asChild variant="flame" size="lg">
                 <Link href={`/organiser/tournaments/${id}/matches/${matchId}/scoring`}>
